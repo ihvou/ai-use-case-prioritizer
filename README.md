@@ -9,7 +9,7 @@ Internal tool for an AI outsourcing company's product & GTM team. Takes a vague 
 3. **Phase 2 — Critic** challenges overconfident scores, names real SaaS incumbents and counter-evidence
 4. **Phase 3 — Analyst responds** per dimension — concedes with revised score or defends with new evidence
 5. PM sees a scored table with expandable detail and can **challenge any dimension directly** via a follow-up thread, triggering a new Analyst response
-6. PM selects an analysis mode (**Standard**, **Live search**, or **Hybrid reliability**) and can export results to **Summary CSV** and **Detail CSV**
+6. PM selects an analysis mode (**Standard**, **Live search**, or **Hybrid reliability**) and can export results as **Summary CSV**, **Detail CSV**, **HTML report**, or **PDF report**
 
 ## Key design decisions
 
@@ -20,7 +20,7 @@ Internal tool for an AI outsourcing company's product & GTM team. Takes a vague 
 - **Live-search with fallback** — Analyst route attempts OpenAI Responses API web search (`web_search` / `web_search_preview`) and falls back to standard completion if unavailable
 - **Hybrid reliability mode** — runs baseline (no web) + web-assisted draft, then reconciles both into a final Phase 1 result to reduce overreaction to weak web snippets
 - **Per-dimension follow-up threads** — PM can challenge any individual dimension score in a collapsible thread; score revisions propagate to the weighted total
-- **Layered exports** — Summary CSV for fast scanning and Detail CSV for full per-dimension reasoning, critique, sources, and thread history
+- **Layered exports** — Summary CSV + Detail CSV for data workflows, plus visual HTML/PDF report pack (portfolio overview, use-case summary pages, and per-dimension pages with citations)
 
 ## 11 Scoring Dimensions
 
@@ -48,6 +48,7 @@ Each dimension has a 5-level rubric with named examples baked into both the LLM 
 - **API routes**: Vercel serverless functions in `api/` — keys stay server-side
 - **Analysis modes**: Standard (no web), Live search (web-assisted), Hybrid reliability (baseline + web + reconciliation)
 - **Optional live web**: OpenAI Responses API tools for analyst Phase 1 when mode uses web
+- **Report exports**: Client-side HTML report generation and browser print-to-PDF flow (no extra backend required)
 - **Styling**: Inline styles, dark theme (`#07090f` base)
 - **Storage**: In-memory React state only — no persistence between sessions yet
 
@@ -82,7 +83,7 @@ ai-use-case-prioritizer/
     lib/
       api.js            # API call helpers
       dimensionView.js  # Derives latest per-dimension view (initial + debate + follow-up)
-      export.js         # Summary/detail CSV export helpers
+      export.js         # CSV + HTML + PDF export helpers
       json.js           # JSON parse + repair utilities
       scoring.js        # Score calculation helpers
     prompts/
@@ -129,3 +130,4 @@ The `docs/` folder contains the research report this tool was designed around:
 - Live search can increase variance in scores depending on source freshness/availability
 - Live search may fall back to non-search mode when web tool path is unavailable
 - Hybrid reliability mode is slower/costlier because it runs three analyst passes before Critic
+- PDF export relies on browser print capabilities and may look slightly different across browsers

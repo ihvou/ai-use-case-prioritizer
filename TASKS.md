@@ -74,10 +74,14 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] Added CSV export buttons in UI
 - [x] Implemented summary CSV (portfolio scan)
 - [x] Implemented detail CSV (per-dimension deep dive: reasoning, debate, sources, thread history)
+- [x] Added HTML report export (portfolio overview + use case summary + per-dimension pages)
+- [x] Added PDF export flow via print-optimized report window
+- [x] Optimized report readability (large score/brief hierarchy, smaller deep-analysis/debate typography)
+- [x] Included citations in both summary cards and detailed dimension sections
+- [x] Removed internal/technical metadata from visual report pages
 **How**: Use `@react-pdf/renderer` or generate an HTML page and call `window.print()` with a print stylesheet. The HTML approach is simpler and requires no new dependency.
-**Format**: 2-3 page document. Cover: title, score, tier, vertical, buyer persona. Body: one section per dimension with score, brief, key evidence, risks. Back: debate summary and conclusion.
+**Format**: Multi-page report. Portfolio summary page, then one summary page per use case, plus one page per dimension with score/brief emphasis, deep analysis, debate, and sources.
 **Remaining**:
-- [ ] Add PDF export with readable sectioned layout
 - [ ] Add optional slides/images export per dimension for stakeholder decks
 
 ### [ ] T-10: Compare view (side-by-side 2-3 use cases)
@@ -121,3 +125,4 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] T-15: Vite project scaffold — modular components, hooks, constants, lib, prompts
 - [x] T-05 (partial): Multi-model support — separated analyst/critic API routes, both on OpenAI temporarily
 - [x] Summary + detail CSV export
+- [x] HTML + PDF visual report export with citation-first layout
