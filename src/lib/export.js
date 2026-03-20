@@ -67,6 +67,25 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function limitWords(text, maxWords) {
+  if (!text) return "";
+  const parts = String(text).trim().split(/\s+/);
+  if (parts.length <= maxWords) return parts.join(" ");
+  return `${parts.slice(0, maxWords).join(" ")}...`;
+}
+
+function shortUrl(url, max = 80) {
+  if (!url) return "";
+  if (url.length <= max) return url;
+  return `${url.slice(0, max - 3)}...`;
+}
+
+function safeFilePart(value, fallback = "use-case") {
+  const raw = String(value || fallback).trim().toLowerCase();
+  const cleaned = raw.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return cleaned || fallback;
+}
+
 function scoreTier(score) {
   const n = Number(score);
   if (!Number.isFinite(n)) return "Unknown";
@@ -108,13 +127,18 @@ function sectionIcon(label) {
   return map[label] || "📌";
 }
 
-function sourceListHtml(sources = []) {
+function sourceListHtml(sources = [], options = {}) {
+  const {
+    maxItems = 6,
+    maxQuoteWords = 18,
+    maxUrlLen = 90,
+  } = options;
   if (!sources?.length) return "<div class=\"muted\">No sources available.</div>";
-  const items = sources.map((s) => {
+  const items = sources.slice(0, maxItems).map((s) => {
     const name = escapeHtml(s?.name || "Unknown source");
-    const quote = s?.quote ? `<div class="source-quote">${escapeHtml(s.quote)}</div>` : "";
+    const quote = s?.quote ? `<div class="source-quote">${escapeHtml(limitWords(s.quote, maxQuoteWords))}</div>` : "";
     const url = s?.url
-      ? `<a class="source-url" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.url)}</a>`
+      ? `<a class="source-url" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortUrl(s.url, maxUrlLen))}</a>`
       : "";
     return `<li class="source-item"><div class="source-name">${name}</div>${quote}${url}</li>`;
   }).join("");
@@ -130,9 +154,10 @@ function citationBadgesHtml(sources = []) {
   return `<div class="citation-line">${badges}</div>`;
 }
 
-function threadHistoryHtml(thread = []) {
+function threadHistoryHtml(thread = [], options = {}) {
+  const { maxItems = 3, maxBodyWords = 40 } = options;
   if (!thread?.length) return "<div class=\"muted\">No follow-up thread.</div>";
-  const items = thread.map((m) => {
+  const items = thread.slice(-maxItems).map((m) => {
     const role = m?.role === "pm" ? "PM challenge" : "Analyst follow-up";
     const body = m?.role === "pm"
       ? (m?.text || "")
@@ -140,7 +165,7 @@ function threadHistoryHtml(thread = []) {
     return `
       <div class="thread-item">
         <div class="thread-role">${escapeHtml(role)}</div>
-        <div class="thread-body">${escapeHtml(body)}</div>
+        <div class="thread-body">${escapeHtml(limitWords(body, maxBodyWords))}</div>
       </div>
     `;
   }).join("");
@@ -157,7 +182,12 @@ function section(label, body, className = "") {
   `;
 }
 
-function renderUseCaseSummaryPage(uc, dims, index) {
+function renderUseCaseSummaryPage(uc, dims, index, options = {}) {
+  const mode = options.mode || "html";
+  const briefWordCap = mode === "pdf" ? 14 : 20;
+  const summaryWordCap = mode === "pdf" ? 34 : 52;
+  const conclusionWordCap = mode === "pdf" ? 42 : 58;
+
   const title = uc.attributes?.title || uc.rawInput || `Use case ${index + 1}`;
   const weighted = calcWeightedScore(uc, dims);
   const tier = scoreTier(weighted);
@@ -174,7 +204,7 @@ function renderUseCaseSummaryPage(uc, dims, index) {
           <span class="dim-weight">${escapeHtml(d.weight)}%</span>
         </div>
         <div class="dim-score" style="color:${escapeHtml(color)}">${score == null ? "-" : `${escapeHtml(score)}/5`}</div>
-        <div class="dim-brief">${escapeHtml(view.brief || "No brief available.")}</div>
+        <div class="dim-brief">${escapeHtml(limitWords(view.brief || "No brief available.", briefWordCap))}</div>
         ${citationBadgesHtml(view.sources)}
       </div>
     `;
@@ -199,24 +229,30 @@ function renderUseCaseSummaryPage(uc, dims, index) {
         <div class="score-value" style="color:${escapeHtml(scoreColor)}">${weighted == null ? "-" : `${escapeHtml(weighted)}%`}</div>
         <div class="score-tier">${priorityIcon(weighted)} ${escapeHtml(tier)}</div>
       </div>
-      <div class="summary-desc">${escapeHtml(uc.attributes?.expandedDescription || uc.rawInput || "")}</div>
+      <div class="summary-desc">${escapeHtml(limitWords(uc.attributes?.expandedDescription || uc.rawInput || "", summaryWordCap))}</div>
       ${summaryMeta}
-      ${section("Strategic Conclusion", `<div class="small-text">${escapeHtml(uc.finalScores?.conclusion || "No conclusion available yet.")}</div>`)}
+      ${section("Strategic Conclusion", `<div class="small-text">${escapeHtml(limitWords(uc.finalScores?.conclusion || "No conclusion available yet.", conclusionWordCap))}</div>`)}
       <div class="dim-grid">${dimCards}</div>
     </article>
   `;
 }
 
-function renderDimensionPage(uc, d) {
+function renderDimensionPage(uc, d, options = {}) {
+  const mode = options.mode || "html";
   const view = getDimensionView(uc, d.id);
   const critic = uc.critique?.dimensions?.[d.id];
   const score = view.effectiveScore;
   const scoreColor = score != null ? dimScoreColor(Number(score)) : "#64748b";
   const title = uc.attributes?.title || uc.rawInput || "Untitled use case";
+  const bigBriefWords = mode === "pdf" ? 22 : 30;
+  const fullWords = mode === "pdf" ? 150 : 190;
+  const riskWords = mode === "pdf" ? 45 : 60;
+  const criticWords = mode === "pdf" ? 40 : 52;
+  const analystWords = mode === "pdf" ? 46 : 60;
 
   const debateBody = `
-    <div class="small-text"><strong>Critic:</strong> ${escapeHtml(critic?.critique || "No critic comment.")}</div>
-    <div class="small-text"><strong>Analyst response:</strong> ${escapeHtml(view.debate?.response || "No debate response.")}</div>
+    <div class="small-text"><strong>Critic:</strong> ${escapeHtml(limitWords(critic?.critique || "No critic comment.", criticWords))}</div>
+    <div class="small-text"><strong>Analyst response:</strong> ${escapeHtml(limitWords(view.debate?.response || "No debate response.", analystWords))}</div>
   `;
 
   return `
@@ -228,14 +264,14 @@ function renderDimensionPage(uc, d) {
       </div>
       <div class="score-brief-band">
         <div class="big-score" style="color:${escapeHtml(scoreColor)}">${score == null ? "-" : `${escapeHtml(score)}/5`}</div>
-        <div class="big-brief">${escapeHtml(view.brief || "No brief summary available.")}</div>
+        <div class="big-brief">${escapeHtml(limitWords(view.brief || "No brief summary available.", bigBriefWords))}</div>
       </div>
-      ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(view.full || "No full analysis available.")}</div>`)}
-      ${section("Risks", `<div class="small-text pre-wrap">${escapeHtml(view.risks || "No risk notes provided.")}</div>`)}
-      ${section("Sources", sourceListHtml(view.sources), "compact")}
+      ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(limitWords(view.full || "No full analysis available.", fullWords))}</div>`)}
+      ${section("Risks", `<div class="small-text pre-wrap">${escapeHtml(limitWords(view.risks || "No risk notes provided.", riskWords))}</div>`)}
+      ${section("Sources", sourceListHtml(view.sources, { maxItems: mode === "pdf" ? 4 : 5, maxQuoteWords: 12, maxUrlLen: 66 }), "compact")}
       ${section("Debate", debateBody, "compact")}
-      ${section("Follow-up Thread", threadHistoryHtml(uc.followUps?.[d.id] || []), "compact")}
-      ${section("Critic Sources", sourceListHtml(critic?.sources || []), "compact")}
+      ${section("Follow-up Thread", threadHistoryHtml(uc.followUps?.[d.id] || [], { maxItems: 2, maxBodyWords: mode === "pdf" ? 28 : 36 }), "compact")}
+      ${section("Critic Sources", sourceListHtml(critic?.sources || [], { maxItems: mode === "pdf" ? 3 : 4, maxQuoteWords: 10, maxUrlLen: 60 }), "compact")}
     </article>
   `;
 }
@@ -247,7 +283,7 @@ function buildPortfolioTable(useCases, dims) {
   const rows = useCases.map((uc, idx) => {
     const title = uc.attributes?.title || uc.rawInput || `Use case ${idx + 1}`;
     const weighted = calcWeightedScore(uc, dims);
-    const conclusion = uc.finalScores?.conclusion || "No conclusion available yet.";
+    const conclusion = limitWords(uc.finalScores?.conclusion || "No conclusion available yet.", 30);
     return `
       <tr>
         <td>${idx + 1}</td>
@@ -273,8 +309,10 @@ function buildPortfolioTable(useCases, dims) {
   `;
 }
 
-function reportCss() {
+function reportCss(mode = "html") {
+  const isPdf = mode === "pdf";
   return `
+    ${isPdf ? "@page { size: A4 portrait; margin: 8mm; }" : ""}
     :root {
       color-scheme: light;
       --bg: #f6f8fc;
@@ -296,7 +334,7 @@ function reportCss() {
     }
     .report {
       width: 100%;
-      max-width: 1050px;
+      max-width: ${isPdf ? "980px" : "1400px"};
       margin: 0 auto;
       padding: 18px;
     }
@@ -304,11 +342,13 @@ function reportCss() {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 14px;
-      padding: 28px 30px;
+      padding: ${isPdf ? "20px 22px" : "24px 26px"};
       margin-bottom: 16px;
       page-break-after: always;
       break-after: page;
-      min-height: 90vh;
+      min-height: ${isPdf ? "1040px" : "740px"};
+      max-height: ${isPdf ? "1040px" : "740px"};
+      overflow: hidden;
     }
     .page:last-child {
       page-break-after: auto;
@@ -324,7 +364,7 @@ function reportCss() {
     }
     .uc-title {
       margin: 0;
-      font-size: 42px;
+      font-size: ${isPdf ? "34px" : "40px"};
       line-height: 1.08;
       letter-spacing: -0.02em;
     }
@@ -336,7 +376,7 @@ function reportCss() {
       margin-bottom: 12px;
     }
     .score-value {
-      font-size: 72px;
+      font-size: ${isPdf ? "62px" : "68px"};
       font-weight: 800;
       line-height: 0.95;
     }
@@ -346,9 +386,9 @@ function reportCss() {
       color: var(--ink);
     }
     .summary-desc {
-      font-size: 18px;
+      font-size: ${isPdf ? "15px" : "17px"};
       color: #1e293b;
-      margin: 12px 0 14px;
+      margin: 10px 0 12px;
       font-weight: 500;
     }
     .meta-grid {
@@ -377,15 +417,15 @@ function reportCss() {
       color: #0f172a;
     }
     .dim-grid {
-      margin-top: 16px;
+      margin-top: 12px;
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(${isPdf ? 2 : 3}, minmax(0, 1fr));
+      gap: 8px;
     }
     .dim-card {
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 12px;
+      padding: 9px 10px;
       background: #fcfdff;
     }
     .dim-head {
@@ -406,15 +446,16 @@ function reportCss() {
       font-weight: 700;
     }
     .dim-score {
-      font-size: 28px;
+      font-size: ${isPdf ? "24px" : "26px"};
       font-weight: 800;
       line-height: 1;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     .dim-brief {
-      font-size: 15px;
+      font-size: ${isPdf ? "12px" : "13px"};
       font-weight: 700;
       color: #1e293b;
+      line-height: 1.25;
     }
     .citation-line {
       margin-top: 8px;
@@ -442,7 +483,7 @@ function reportCss() {
     }
     .dim-page-title {
       margin: 0;
-      font-size: 36px;
+      font-size: ${isPdf ? "30px" : "34px"};
       line-height: 1.05;
     }
     .dim-page-weight {
@@ -453,32 +494,32 @@ function reportCss() {
     .score-brief-band {
       display: grid;
       grid-template-columns: auto 1fr;
-      gap: 16px;
+      gap: 12px;
       align-items: center;
       background: #eff6ff;
       border: 1px solid #bfdbfe;
       border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 14px;
+      padding: ${isPdf ? "10px 12px" : "12px 14px"};
+      margin-bottom: 10px;
     }
     .big-score {
-      font-size: 54px;
+      font-size: ${isPdf ? "44px" : "48px"};
       font-weight: 800;
       line-height: 1;
-      min-width: 120px;
+      min-width: ${isPdf ? "100px" : "110px"};
       text-align: center;
     }
     .big-brief {
-      font-size: 24px;
+      font-size: ${isPdf ? "18px" : "20px"};
       line-height: 1.2;
       font-weight: 800;
       color: #0f172a;
     }
     .section {
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 10px 12px;
+      padding: 8px 10px;
       background: #ffffff;
     }
     .section-label {
@@ -497,8 +538,8 @@ function reportCss() {
       line-height: 1;
     }
     .small-text {
-      font-size: 12px;
-      line-height: 1.45;
+      font-size: 11px;
+      line-height: 1.35;
       color: #334155;
     }
     .pre-wrap {
@@ -511,7 +552,7 @@ function reportCss() {
       gap: 6px;
     }
     .source-item {
-      font-size: 12px;
+      font-size: 11px;
       color: #334155;
     }
     .source-name {
@@ -551,9 +592,9 @@ function reportCss() {
       margin-bottom: 2px;
     }
     .thread-body {
-      font-size: 12px;
+      font-size: 11px;
       color: #334155;
-      line-height: 1.4;
+      line-height: 1.3;
       white-space: pre-wrap;
     }
     .portfolio-title {
@@ -597,8 +638,10 @@ function reportCss() {
         border: none;
         border-radius: 0;
         margin: 0;
-        padding: 14mm 12mm;
-        min-height: auto;
+        padding: 0;
+        min-height: calc(297mm - 16mm);
+        max-height: calc(297mm - 16mm);
+        overflow: hidden;
       }
     }
     @media (max-width: 840px) {
@@ -625,7 +668,9 @@ function reportCss() {
   `;
 }
 
-function buildReportHtml(useCases, dims) {
+function buildReportHtml(useCases, dims, options = {}) {
+  const mode = options.mode || "html";
+  const includePortfolio = options.includePortfolio !== false;
   const generated = new Date().toLocaleString();
   const portfolioPage = `
     <article class="page">
@@ -638,8 +683,8 @@ function buildReportHtml(useCases, dims) {
   `;
 
   const useCasePages = useCases.map((uc, index) => {
-    const summary = renderUseCaseSummaryPage(uc, dims, index);
-    const dimPages = dims.map((d) => renderDimensionPage(uc, d)).join("");
+    const summary = renderUseCaseSummaryPage(uc, dims, index, { mode });
+    const dimPages = dims.map((d) => renderDimensionPage(uc, d, { mode })).join("");
     return `${summary}${dimPages}`;
   }).join("");
 
@@ -650,11 +695,11 @@ function buildReportHtml(useCases, dims) {
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>AI Use Case Analysis Report</title>
-        <style>${reportCss()}</style>
+        <style>${reportCss(mode)}</style>
       </head>
       <body>
         <main class="report">
-          ${portfolioPage}
+          ${includePortfolio ? portfolioPage : ""}
           ${useCasePages}
         </main>
       </body>
@@ -787,13 +832,7 @@ export function exportDetailCsv(useCases, dims) {
   downloadCsv(`use-case-detail-${timestampTag()}.csv`, rowsToCsv(headers, rows));
 }
 
-export function exportAnalysisHtml(useCases, dims) {
-  const html = buildReportHtml(useCases, dims);
-  downloadHtml(`use-case-analysis-${timestampTag()}.html`, html);
-}
-
-export function exportAnalysisPdf(useCases, dims) {
-  const html = buildReportHtml(useCases, dims);
+function printHtmlFromHiddenFrame(html) {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.style.position = "fixed";
@@ -839,9 +878,31 @@ export function exportAnalysisPdf(useCases, dims) {
   if (!doc) {
     cleanup();
     window.alert("Could not initialize PDF print frame.");
-    return;
+    return false;
   }
   doc.open();
   doc.write(html);
   doc.close();
+  return true;
+}
+
+export function exportAnalysisHtml(useCases, dims) {
+  const html = buildReportHtml(useCases, dims, { mode: "html", includePortfolio: true });
+  downloadHtml(`use-case-analysis-${timestampTag()}.html`, html);
+}
+
+export function exportAnalysisPdf(useCases, dims) {
+  const html = buildReportHtml(useCases, dims, { mode: "pdf", includePortfolio: true });
+  printHtmlFromHiddenFrame(html);
+}
+
+export function exportSingleUseCaseHtml(uc, dims) {
+  const html = buildReportHtml([uc], dims, { mode: "html", includePortfolio: false });
+  const tag = safeFilePart(uc?.attributes?.title || uc?.id || "use-case");
+  downloadHtml(`use-case-report-${tag}-${timestampTag()}.html`, html);
+}
+
+export function exportSingleUseCasePdf(uc, dims) {
+  const html = buildReportHtml([uc], dims, { mode: "pdf", includePortfolio: false });
+  printHtmlFromHiddenFrame(html);
 }

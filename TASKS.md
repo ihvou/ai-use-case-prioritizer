@@ -83,9 +83,11 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] Implemented detail CSV (per-dimension deep dive: reasoning, debate, sources, thread history)
 - [x] Added HTML report export (portfolio overview + use case summary + per-dimension pages)
 - [x] Added PDF export flow via print-optimized report window
+- [x] Added single-use-case HTML/PDF export from expanded row panel
 - [x] Optimized report readability (large score/brief hierarchy, smaller deep-analysis/debate typography)
 - [x] Included citations in both summary cards and detailed dimension sections
 - [x] Removed internal/technical metadata from visual report pages
+- [x] Added orientation + page-fit optimization (HTML landscape slides, PDF portrait pages)
 **How**: Use `@react-pdf/renderer` or generate an HTML page and call `window.print()` with a print stylesheet. The HTML approach is simpler and requires no new dependency.
 **Format**: Multi-page report. Portfolio summary page, then one summary page per use case, plus one page per dimension with score/brief emphasis, deep analysis, debate, and sources.
 **Remaining**:

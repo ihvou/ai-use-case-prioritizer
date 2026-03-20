@@ -15,12 +15,6 @@ function mergeSources(...lists) {
   return merged;
 }
 
-function shorten(text, max = 220) {
-  if (!text) return "";
-  if (text.length <= max) return text;
-  return `${text.slice(0, max - 3)}...`;
-}
-
 export function getLatestAnalystFollowUp(thread = []) {
   for (let i = thread.length - 1; i >= 0; i -= 1) {
     if (thread[i]?.role === "analyst") return thread[i];
@@ -47,7 +41,7 @@ export function getDimensionView(uc, dimId) {
     followUp?.response ? `Follow-up update:\n${followUp.response}` : "",
   ].filter(Boolean).join("\n\n");
 
-  const briefSourceText = followUp?.response || debate?.response || initial?.brief || "";
+  const briefSourceText = followUp?.brief || debate?.brief || initial?.brief || "";
   const sources = mergeSources(followUp?.sources, debate?.sources, initial?.sources);
 
   return {
@@ -57,7 +51,7 @@ export function getDimensionView(uc, dimId) {
     stage,
     stageLabel,
     effectiveScore: getEffectiveScore(uc, dimId),
-    brief: shorten(briefSourceText),
+    brief: briefSourceText,
     full: combinedFull || initial?.full || "",
     risks: initial?.risks || "",
     sources,
@@ -74,4 +68,3 @@ export function formatSourcesForCell(sources = []) {
     })
     .join(" | ");
 }
-

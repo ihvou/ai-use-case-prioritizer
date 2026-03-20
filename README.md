@@ -9,7 +9,8 @@ Internal tool for an AI outsourcing company's product & GTM team. Takes a vague 
 3. **Phase 2 — Critic** challenges overconfident scores, names real SaaS incumbents and counter-evidence
 4. **Phase 3 — Analyst responds** per dimension — concedes with revised score or defends with new evidence
 5. PM sees a scored table with expandable detail and can **challenge any dimension directly** via a follow-up thread, triggering a new Analyst response
-6. PM selects an analysis mode (**Standard**, **Live search**, or **Hybrid reliability**) and uses the **Export** dropdown for **Summary CSV**, **Detail CSV**, **HTML report**, **PDF report**, or **Logs JSON**
+6. PM selects an analysis mode (**Hybrid reliability** is default; also **Standard** and **Live search**) and uses the **Export** dropdown for **Summary CSV**, **Detail CSV**, **HTML report**, **PDF report**, or **Logs JSON**
+7. PM can also export a single use case directly from the expanded row panel (**Export HTML** / **Export PDF**)
 
 ## Key design decisions
 
@@ -18,9 +19,9 @@ Internal tool for an AI outsourcing company's product & GTM team. Takes a vague 
 - **Evidence-first scoring** — Analyst is instructed to cite named companies with specific metrics and real URLs. Scores without evidence are invalid
 - **Multi-LLM debate** — Analyst uses OpenAI GPT-5.4 mini, Critic uses OpenAI GPT-5.4. Architecture supports swapping to other models via the API route layer
 - **Live-search with fallback** — Analyst route attempts OpenAI Responses API web search (`web_search` / `web_search_preview`) and falls back to standard completion if unavailable
-- **Hybrid reliability mode** — runs baseline (no web) + web-assisted draft, then reconciles both into a final Phase 1 result to reduce overreaction to weak web snippets
+- **Hybrid reliability mode (default)** — runs baseline (no web) + web-assisted draft, then reconciles both into a final Phase 1 result to reduce overreaction to weak web snippets
 - **Per-dimension follow-up threads** — PM can challenge any individual dimension score in a collapsible thread; score revisions propagate to the weighted total
-- **Layered exports via one menu** — Summary CSV + Detail CSV for data workflows, visual HTML/PDF report pack (portfolio overview, use-case summary pages, and per-dimension pages with citations), and on-demand debug log export
+- **Layered exports via one menu** — Summary CSV + Detail CSV for data workflows, visual HTML/PDF report pack (portfolio overview, use-case summary pages, and per-dimension pages with citations), single-use-case HTML/PDF export, and on-demand debug log export
 
 ## 11 Scoring Dimensions
 
@@ -133,3 +134,4 @@ The `docs/` folder contains the research report this tool was designed around:
 - Hybrid reliability mode is slower/costlier because it runs three analyst passes before Critic
 - PDF export relies on browser print capabilities and may look slightly different across browsers
 - LLM JSON can still be malformed; parser includes stronger repair + debate/final retry, and debug logs are available on demand via the Export menu
+- HTML report pages are optimized as landscape slides; PDF pages are optimized for portrait print

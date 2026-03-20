@@ -3,6 +3,7 @@ import Spinner from "./Spinner";
 import OverviewTab from "./OverviewTab";
 import DimensionsTab from "./DimensionsTab";
 import DebateTab from "./DebateTab";
+import { exportSingleUseCaseHtml, exportSingleUseCasePdf } from "../lib/export";
 
 const PHASE_LABELS = {
   analyst: "Analyst researching...",
@@ -37,7 +38,7 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
             {t.label}
           </button>
         ))}
-        <div style={{ marginLeft: "auto", fontSize: 10, padding: "0 8px" }}>
+        <div style={{ marginLeft: "auto", fontSize: 10, padding: "0 8px", display: "flex", alignItems: "center", gap: 10 }}>
           {uc.status === "analyzing"
             ? <span style={{ color: "#a855f7", display: "flex", alignItems: "center", gap: 6 }}>
                 <Spinner size={10} /> {PHASE_LABELS[uc.phase] || "Processing..."}
@@ -60,6 +61,44 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
                   </span>
                 )}
               </span>}
+          {uc.status !== "analyzing" && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exportSingleUseCaseHtml(uc, dims);
+                }}
+                style={{
+                  background: "#0a0d17",
+                  border: "1px solid #1f2937",
+                  color: "#7dd3fc",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                }}>
+                Export HTML
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exportSingleUseCasePdf(uc, dims);
+                }}
+                style={{
+                  background: "#0a0d17",
+                  border: "1px solid #1f2937",
+                  color: "#93c5fd",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                }}>
+                Export PDF
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

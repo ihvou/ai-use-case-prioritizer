@@ -24,9 +24,14 @@ Your full analysis: ${dimData?.full || ""}
 ${threadHistory ? `Previous exchanges in this thread:\n${threadHistory}\n\n` : ""}PM's new challenge: "${challenge}"
 
 Respond directly to the challenge. If valid, concede with a revised score AND clear reasoning. If not valid, defend with NEW evidence not previously cited (repeating prior evidence is not a valid defense).
+Also include a neutral concise brief that explains:
+- why this score deserves points above 0,
+- why it still misses points below 5.
+Do not mention the critic and do not use first-person phrasing.
 
 Return ONLY this JSON:
 {
+  "brief": "<single sentence, max 32 words, objective: why score >0 and why score <5>",
   "response": "<3-5 sentences \u2014 direct, substantive, analytical>",
   "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}],
   "scoreAdjusted": <true if you are revising the score, false otherwise>,

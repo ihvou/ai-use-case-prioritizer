@@ -19,7 +19,7 @@ export default function App() {
   const [showDimsPanel, setShowDimsPanel] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [globalAnalyzing, setGlobalAnalyzing] = useState(false);
-  const [analysisMode, setAnalysisMode] = useState("live_search");
+  const [analysisMode, setAnalysisMode] = useState("hybrid");
   const [fuInputs, setFuInputs] = useState({});
   const [fuLoading, setFuLoading] = useState({});
 
