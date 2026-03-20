@@ -3,7 +3,7 @@ import Spinner from "./Spinner";
 import OverviewTab from "./OverviewTab";
 import DimensionsTab from "./DimensionsTab";
 import DebateTab from "./DebateTab";
-import { exportSingleUseCaseHtml, exportSingleUseCasePdf } from "../lib/export";
+import { exportSingleUseCaseHtml, exportSingleUseCasePdf, exportSingleUseCaseImagesZip } from "../lib/export";
 
 const PHASE_LABELS = {
   analyst: "Analyst researching...",
@@ -96,6 +96,23 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
                   cursor: "pointer",
                 }}>
                 Export PDF
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void exportSingleUseCaseImagesZip(uc, dims);
+                }}
+                style={{
+                  background: "#0a0d17",
+                  border: "1px solid #1f2937",
+                  color: "#a5b4fc",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                }}>
+                Export Images ZIP
               </button>
             </div>
           )}

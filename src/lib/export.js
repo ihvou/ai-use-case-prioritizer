@@ -1,5 +1,7 @@
 import { calcWeightedScore, dimScoreColor, totalScoreColor } from "./scoring";
 import { getDimensionView, formatSourcesForCell } from "./dimensionView";
+import JSZip from "jszip";
+import { toPng } from "html-to-image";
 
 function csvEscape(value) {
   if (value == null) return "";
@@ -28,6 +30,10 @@ function downloadCsv(filename, csvContent) {
 
 function downloadHtml(filename, htmlContent) {
   const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8;" });
+  downloadBlob(filename, blob);
+}
+
+function downloadBlob(filename, blob) {
   const link = document.createElement("a");
   const url = URL.createObjectURL(blob);
   link.href = url;
@@ -36,6 +42,41 @@ function downloadHtml(filename, htmlContent) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+async function dataUrlToBlob(dataUrl) {
+  const res = await fetch(dataUrl);
+  return res.blob();
+}
+
+function buildOffscreenReportHost(html) {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const styles = Array.from(parsed.querySelectorAll("style")).map((s) => s.textContent || "").join("\n");
+  const report = parsed.querySelector("main.report");
+  if (!report) throw new Error("Could not find report content for image export.");
+
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  host.style.position = "fixed";
+  host.style.left = "-200vw";
+  host.style.top = "0";
+  host.style.width = "1600px";
+  host.style.background = "#ffffff";
+  host.style.pointerEvents = "none";
+  host.style.zIndex = "-1";
+  host.innerHTML = `<style>${styles}</style><main class="report">${report.innerHTML}</main>`;
+  return host;
+}
+
+async function ensureRendered() {
+  if (typeof document !== "undefined" && document.fonts?.ready) {
+    try {
+      await document.fonts.ready;
+    } catch (_) {
+      // Ignore font readiness errors.
+    }
+  }
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
 function timestampTag() {
@@ -905,4 +946,48 @@ export function exportSingleUseCaseHtml(uc, dims) {
 export function exportSingleUseCasePdf(uc, dims) {
   const html = buildReportHtml([uc], dims, { mode: "pdf", includePortfolio: false });
   printHtmlFromHiddenFrame(html);
+}
+
+export async function exportSingleUseCaseImagesZip(uc, dims) {
+  const title = uc?.attributes?.title || uc?.rawInput || uc?.id || "use-case";
+  const baseTag = safeFilePart(title);
+  const html = buildReportHtml([uc], dims, { mode: "html", includePortfolio: false });
+  const host = buildOffscreenReportHost(html);
+
+  document.body.appendChild(host);
+  try {
+    await ensureRendered();
+    const pages = Array.from(host.querySelectorAll(".page"));
+    if (!pages.length) {
+      window.alert("No pages found for image export.");
+      return;
+    }
+
+    const zip = new JSZip();
+    for (let i = 0; i < pages.length; i += 1) {
+      const page = pages[i];
+      const dataUrl = await toPng(page, {
+        cacheBust: true,
+        pixelRatio: 3,
+        backgroundColor: "#ffffff",
+        width: page.scrollWidth,
+        height: page.scrollHeight,
+      });
+      const blob = await dataUrlToBlob(dataUrl);
+      const idx = String(i + 1).padStart(2, "0");
+      zip.file(`${baseTag}-slide-${idx}.png`, blob);
+    }
+
+    const zipBlob = await zip.generateAsync({
+      type: "blob",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+    downloadBlob(`use-case-images-${baseTag}-${timestampTag()}.zip`, zipBlob);
+  } catch (err) {
+    console.error("Image export failed:", err);
+    window.alert(`Image export failed: ${err.message}`);
+  } finally {
+    if (host.parentNode) host.parentNode.removeChild(host);
+  }
 }

@@ -10,7 +10,7 @@ Internal tool for an AI outsourcing company's product & GTM team. Takes a vague 
 4. **Phase 3 — Analyst responds** per dimension — concedes with revised score or defends with new evidence
 5. PM sees a scored table with expandable detail and can **challenge any dimension directly** via a follow-up thread, triggering a new Analyst response
 6. PM selects an analysis mode (**Hybrid reliability** is default; also **Standard** and **Live search**) and uses the **Export** dropdown for **Summary CSV**, **Detail CSV**, **HTML report**, **PDF report**, or **Logs JSON**
-7. PM can also export a single use case directly from the expanded row panel (**Export HTML** / **Export PDF**)
+7. PM can also export a single use case directly from the expanded row panel (**Export HTML** / **Export PDF** / **Export Images ZIP**)
 
 ## Key design decisions
 
