@@ -13,29 +13,29 @@ export default function DimensionsTab({ uc, dims }) {
 
         if (!initData) {
           return (
-            <div key={d.id} style={{ background: "#0f1520", borderRadius: 8, padding: "10px 14px", opacity: 0.25, border: "1px solid #141820" }}>
-              <span style={{ color: "#4b5563", fontSize: 12 }}>{d.label}</span>
+            <div key={d.id} style={{ background: "var(--ck-surface-soft)", borderRadius: 8, padding: "10px 14px", opacity: 0.35, border: "1px solid var(--ck-line)" }}>
+              <span style={{ color: "var(--ck-muted)", fontSize: 12 }}>{d.label}</span>
             </div>
           );
         }
         return (
-          <div key={d.id} style={{ background: "#0f1520", borderRadius: 10, padding: "14px 16px", border: `1px solid ${d.enabled ? "#1e2a3a" : "#141820"}`, opacity: d.enabled ? 1 : 0.5 }}>
+          <div key={d.id} style={{ background: "var(--ck-surface)", borderRadius: 10, padding: "14px 16px", border: `1px solid ${d.enabled ? "var(--ck-line-strong)" : "var(--ck-line)"}`, opacity: d.enabled ? 1 : 0.6 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span style={{ fontWeight: 700, color: "#e2e8f0", fontSize: 13 }}>{d.label}</span>
+              <span style={{ fontWeight: 700, color: "var(--ck-text)", fontSize: 13 }}>{d.label}</span>
               {!d.enabled && (
-                <span style={{ fontSize: 10, color: "#374151", background: "#0a0d17", padding: "1px 6px", borderRadius: 4 }}>excluded from score</span>
+                <span style={{ fontSize: 10, color: "var(--ck-muted)", background: "var(--ck-surface-soft)", border: "1px solid var(--ck-line)", padding: "1px 6px", borderRadius: 4 }}>excluded from score</span>
               )}
               <div style={{ marginLeft: "auto", display: "flex", gap: 5, alignItems: "center" }}>
                 {revised && (
                   <>
                     <ScorePill score={initData.score} />
-                    <span style={{ color: "#374151", fontSize: 11 }}>-&gt;</span>
+                    <span style={{ color: "var(--ck-muted)", fontSize: 11 }}>-&gt;</span>
                   </>
                 )}
                 {view.effectiveScore != null && <ScorePill score={view.effectiveScore} revised={revised} />}
-                {revised && <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700 }}>REVISED</span>}
+                {revised && <span style={{ fontSize: 10, color: "#12805c", fontWeight: 700 }}>REVISED</span>}
                 {view.stage !== "initial" && (
-                  <span style={{ fontSize: 10, color: "#60a5fa", fontWeight: 700 }}>{view.stageLabel.toUpperCase()}</span>
+                  <span style={{ fontSize: 10, color: "var(--ck-blue)", fontWeight: 700 }}>{view.stageLabel.toUpperCase()}</span>
                 )}
               </div>
             </div>

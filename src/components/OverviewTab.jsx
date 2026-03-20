@@ -7,9 +7,9 @@ export default function OverviewTab({ uc, dims }) {
   const a = uc.attributes;
   const score = calcWeightedScore(uc, dims);
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
-      <div style={{ background: "#0f1520", borderRadius: 10, padding: "14px 16px", border: "1px solid #1e2a3a" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#a855f7", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 14 }}>
+      <div style={{ background: "var(--ck-surface)", borderRadius: 10, padding: "14px 16px", border: "1px solid var(--ck-line)" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--ck-blue)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
           Use Case Attributes
         </div>
         {a ? (
@@ -22,23 +22,23 @@ export default function OverviewTab({ uc, dims }) {
               ["Delivery Model", a.deliveryModel],
             ].map(([k, v]) => v && (
               <div key={k} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
-                <span style={{ color: "#4b5563", fontSize: 11, minWidth: 80, paddingTop: 1, flexShrink: 0 }}>{k}</span>
-                <span style={{ color: "#cbd5e1", fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}>{v}</span>
+                <span style={{ color: "var(--ck-muted)", fontSize: 11, minWidth: 80, paddingTop: 1, flexShrink: 0 }}>{k}</span>
+                <span style={{ color: "var(--ck-text)", fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}>{v}</span>
               </div>
             ))}
             {a.expandedDescription && (
-              <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.65, margin: "12px 0 0", borderTop: "1px solid #1e2a3a", paddingTop: 12 }}>
+              <p style={{ fontSize: 12, color: "var(--ck-muted)", lineHeight: 1.65, margin: "12px 0 0", borderTop: "1px solid var(--ck-line)", paddingTop: 12 }}>
                 {a.expandedDescription}
               </p>
             )}
           </>
         ) : (
-          <span style={{ color: "#374151", fontSize: 12 }}>Analyzing...</span>
+          <span style={{ color: "var(--ck-muted)", fontSize: 12 }}>Analyzing...</span>
         )}
       </div>
 
-      <div style={{ background: "#0f1520", borderRadius: 10, padding: "14px 16px", border: "1px solid #1e2a3a" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#a855f7", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+      <div style={{ background: "var(--ck-surface)", borderRadius: 10, padding: "14px 16px", border: "1px solid var(--ck-line)" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--ck-blue)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
           Score Summary
         </div>
         {dims.map(d => {
@@ -50,34 +50,34 @@ export default function OverviewTab({ uc, dims }) {
               <div style={{ minWidth: 52 }}>
                 {view.effectiveScore != null
                   ? <ScorePill score={view.effectiveScore} revised={revised} />
-                  : <span style={{ color: "#2d3748", fontSize: 12 }}>-</span>}
+                  : <span style={{ color: "var(--ck-muted)", fontSize: 12 }}>-</span>}
               </div>
               <div>
-                <div style={{ fontSize: 12, color: d.enabled ? "#e2e8f0" : "#4b5563", fontWeight: 600, lineHeight: 1.3 }}>
+                <div style={{ fontSize: 12, color: d.enabled ? "var(--ck-text)" : "var(--ck-muted)", fontWeight: 600, lineHeight: 1.3 }}>
                   {d.label}
-                  <span style={{ color: "#374151", fontWeight: 400, fontSize: 10, marginLeft: 4 }}>{d.weight}%</span>
-                  {!d.enabled && <span style={{ color: "#374151", fontSize: 10, marginLeft: 4 }}>(excluded)</span>}
+                  <span style={{ color: "var(--ck-muted)", fontWeight: 400, fontSize: 10, marginLeft: 4 }}>{d.weight}%</span>
+                  {!d.enabled && <span style={{ color: "var(--ck-muted)", fontSize: 10, marginLeft: 4 }}>(excluded)</span>}
                 </div>
                 {view.brief && (
-                  <div style={{ fontSize: 11, color: "#4b5563", marginTop: 1, lineHeight: 1.4 }}>
+                  <div style={{ fontSize: 11, color: "var(--ck-muted)", marginTop: 1, lineHeight: 1.4 }}>
                     {view.brief}
                   </div>
                 )}
                 {view.stage !== "initial" && (
-                  <div style={{ fontSize: 10, color: "#60a5fa", marginTop: 1 }}>{view.stageLabel}</div>
+                  <div style={{ fontSize: 10, color: "var(--ck-blue)", marginTop: 1 }}>{view.stageLabel}</div>
                 )}
               </div>
             </div>
           );
         })}
         {uc.finalScores?.conclusion && (
-          <div style={{ marginTop: 12, padding: "10px 12px", background: "#0a0d17", borderRadius: 8, fontSize: 12, color: "#94a3b8", borderLeft: "3px solid #7c3aed", lineHeight: 1.7 }}>
+          <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--ck-surface-soft)", borderRadius: 8, fontSize: 12, color: "var(--ck-muted)", borderLeft: "3px solid var(--ck-blue)", lineHeight: 1.7 }}>
             {uc.finalScores.conclusion}
           </div>
         )}
         {score && (
           <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#4b5563" }}>Weighted score:</span>
+            <span style={{ fontSize: 11, color: "var(--ck-muted)" }}>Weighted score:</span>
             <TotalPill score={score} />
           </div>
         )}

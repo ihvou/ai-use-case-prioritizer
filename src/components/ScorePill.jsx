@@ -5,7 +5,7 @@ export default function ScorePill({ score, revised = false }) {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 3,
-      background: c + "22", border: `1.5px solid ${c}55`,
+      background: `${c}1a`, border: `1.5px solid ${c}66`,
       color: c, padding: "2px 8px", borderRadius: 6,
       fontWeight: 700, fontSize: 12, fontFamily: "monospace", whiteSpace: "nowrap",
     }}>

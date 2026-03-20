@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Spinner from "./Spinner";
 import OverviewTab from "./OverviewTab";
 import DimensionsTab from "./DimensionsTab";
 import DebateTab from "./DebateTab";
+import ProgressTab from "./ProgressTab";
 import { exportSingleUseCaseHtml, exportSingleUseCasePdf, exportSingleUseCaseImagesZip } from "../lib/export";
 
 const PHASE_LABELS = {
@@ -15,15 +16,20 @@ const PHASE_LABELS = {
 };
 
 export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoading, onFollowUp }) {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("progress");
+
+  useEffect(() => {
+    setTab("progress");
+  }, [uc.id]);
 
   return (
-    <div style={{ borderTop: "2px solid #5b21b633" }}>
-      <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid #1e2a3a", background: "#0f1420", padding: "0 16px" }}>
+    <div style={{ borderTop: "2px solid var(--ck-line-strong)" }}>
+      <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--ck-line)", background: "var(--ck-surface-soft)", padding: "0 16px", flexWrap: "wrap" }}>
         {[
           { id: "overview", label: "Overview" },
           { id: "dimensions", label: "Dimensions" },
           { id: "debate", label: "Debate & Challenges" },
+          { id: "progress", label: "Progress" },
         ].map(t => (
           <button
             key={t.id}
@@ -31,19 +37,19 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
             style={{
               background: "none",
               border: "none",
-              borderBottom: tab === t.id ? "2px solid #a855f7" : "2px solid transparent",
-              color: tab === t.id ? "#a855f7" : "#4b5563",
+              borderBottom: tab === t.id ? "2px solid var(--ck-blue)" : "2px solid transparent",
+              color: tab === t.id ? "var(--ck-blue)" : "var(--ck-muted)",
               padding: "9px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer",
             }}>
             {t.label}
           </button>
         ))}
-        <div style={{ marginLeft: "auto", fontSize: 10, padding: "0 8px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ marginLeft: "auto", fontSize: 10, padding: "6px 8px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           {uc.status === "analyzing"
-            ? <span style={{ color: "#a855f7", display: "flex", alignItems: "center", gap: 6 }}>
+            ? <span style={{ color: "var(--ck-blue)", display: "flex", alignItems: "center", gap: 6 }}>
                 <Spinner size={10} /> {PHASE_LABELS[uc.phase] || "Processing..."}
               </span>
-            : <span style={{ color: "#2d3748" }}>
+            : <span style={{ color: "var(--ck-muted)" }}>
                 Analyst: OpenAI GPT-5.4 mini | Critic: OpenAI GPT-5.4 | Sources may include model memory and live web - verify before use
                 {uc.analysisMeta?.analysisMode && (
                   <span style={{ marginLeft: 6 }}>
@@ -51,12 +57,12 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
                   </span>
                 )}
                 {uc.analysisMeta?.liveSearchRequested && (
-                  <span style={{ marginLeft: 6, color: "#60a5fa" }}>
+                  <span style={{ marginLeft: 6, color: "var(--ck-blue)" }}>
                     | Live search {uc.analysisMeta?.liveSearchUsed ? `on (${uc.analysisMeta?.webSearchCalls || 0} calls)` : "fallback"}
                   </span>
                 )}
                 {uc.analysisMeta?.hybridStats && (
-                  <span style={{ marginLeft: 6, color: "#a78bfa" }}>
+                  <span style={{ marginLeft: 6, color: "var(--ck-blue-ink)" }}>
                     | Hybrid delta: {uc.analysisMeta.hybridStats.changedFromBaseline} dims
                   </span>
                 )}
@@ -70,9 +76,9 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
                   exportSingleUseCaseHtml(uc, dims);
                 }}
                 style={{
-                  background: "#0a0d17",
-                  border: "1px solid #1f2937",
-                  color: "#7dd3fc",
+                  background: "var(--ck-surface)",
+                  border: "1px solid var(--ck-line)",
+                  color: "var(--ck-blue)",
                   borderRadius: 6,
                   fontSize: 11,
                   padding: "4px 8px",
@@ -87,9 +93,9 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
                   exportSingleUseCasePdf(uc, dims);
                 }}
                 style={{
-                  background: "#0a0d17",
-                  border: "1px solid #1f2937",
-                  color: "#93c5fd",
+                  background: "var(--ck-surface)",
+                  border: "1px solid var(--ck-line)",
+                  color: "var(--ck-blue)",
                   borderRadius: 6,
                   fontSize: 11,
                   padding: "4px 8px",
@@ -104,9 +110,9 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
                   void exportSingleUseCaseImagesZip(uc, dims);
                 }}
                 style={{
-                  background: "#0a0d17",
-                  border: "1px solid #1f2937",
-                  color: "#a5b4fc",
+                  background: "var(--ck-surface)",
+                  border: "1px solid var(--ck-line)",
+                  color: "var(--ck-blue)",
                   borderRadius: 6,
                   fontSize: 11,
                   padding: "4px 8px",
@@ -119,9 +125,9 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
         </div>
       </div>
 
-      <div style={{ padding: 16, background: "#080b14" }}>
+      <div style={{ padding: 16, background: "var(--ck-bg)" }}>
         {uc.status === "error" && (
-          <div style={{ background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "10px 14px", color: "#fca5a5", fontSize: 13, marginBottom: 14 }}>
+          <div style={{ background: "#fff0ee", border: "1px solid #f2c7be", borderRadius: 8, padding: "10px 14px", color: "#b42318", fontSize: 13, marginBottom: 14 }}>
             Warning: {uc.errorMsg}
           </div>
         )}
@@ -134,6 +140,7 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
             fuLoading={fuLoading} onFollowUp={onFollowUp}
           />
         )}
+        {tab === "progress" && <ProgressTab uc={uc} />}
       </div>
     </div>
   );

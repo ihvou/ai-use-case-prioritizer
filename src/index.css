@@ -1,21 +1,105 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@font-face {
+  font-family: "Aileron";
+  src: url("https://www.ciklum.com/wp-content/themes/ciklum/assets/fonts/Aileron-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aileron";
+  src: url("https://www.ciklum.com/wp-content/themes/ciklum/assets/fonts/Aileron-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aileron";
+  src: url("https://www.ciklum.com/wp-content/themes/ciklum/assets/fonts/Aileron-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aileron";
+  src: url("https://www.ciklum.com/wp-content/themes/ciklum/assets/fonts/Aileron-Black.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aileron";
+  src: url("https://www.ciklum.com/wp-content/themes/ciklum/assets/fonts/Aileron-Heavy.woff2") format("woff2");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+  --ck-bg: #f5f6ff;
+  --ck-surface: #ffffff;
+  --ck-surface-soft: #eff2ff;
+  --ck-line: #d7deef;
+  --ck-line-strong: #bcc8e2;
+  --ck-text: #001429;
+  --ck-muted: #495377;
+  --ck-muted-soft: #5f6b8b;
+  --ck-blue: #1324bf;
+  --ck-blue-ink: #0e1a95;
+  --ck-blue-soft: #e8ecff;
+  --ck-teal: #8cffc6;
+  --ck-warn-bg: #fff4df;
+  --ck-warn-line: #f2c14f;
+  --ck-risk-bg: #fff0eb;
+  --ck-risk-line: #f97316;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-* {
-  box-sizing: border-box;
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
+  background: var(--ck-bg);
+}
+
+body {
+  font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--ck-text);
+}
+
+h1,
+h2,
+h3,
+.brand-title {
+  font-family: "Aileron", "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2d3748;
-  border-radius: 3px;
+  background: #bcc8e2;
+  border-radius: 6px;
 }
 
 button {

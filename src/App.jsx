@@ -114,29 +114,36 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#07090f", color: "#e2e8f0", fontFamily: "system-ui,-apple-system,sans-serif", fontSize: 14 }}>
+    <div style={{ minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden", background: "var(--ck-bg)", color: "var(--ck-text)", fontFamily: "Inter, 'Segoe UI', -apple-system, sans-serif", fontSize: 14 }}>
       {/* HEADER */}
       <div style={{
-        background: "#0a0d17", borderBottom: "1px solid #141a28",
+        background: "var(--ck-surface)", borderBottom: "1px solid var(--ck-line)",
         padding: "11px 20px", display: "flex", alignItems: "center", gap: 12,
-        position: "sticky", top: 0, zIndex: 20,
+        position: "sticky", top: 0, zIndex: 20, flexWrap: "wrap",
       }}>
-        <div>
-          <span style={{ fontWeight: 800, fontSize: 15, color: "#a855f7" }}>AI Use Case Prioritizer</span>
-          <span style={{ color: "#2d3748", fontSize: 12, marginLeft: 10 }}>
-            {"11 dimensions | analyst <-> critic debate | per-dimension challenges | outsourcing delivery focus"}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <img
+            src="https://www.ciklum.com/wp-content/uploads/2025/10/fav.png"
+            alt="Ciklum icon"
+            width={14}
+            height={14}
+            style={{ borderRadius: 3, flexShrink: 0 }}
+          />
+          <span className="brand-title" style={{ fontWeight: 800, fontSize: 16, color: "var(--ck-blue)" }}>AI Use Case Researcher</span>
+          <span style={{ color: "var(--ck-muted-soft)", fontSize: 12, marginLeft: 2 }}>
+            {"11 dimensions | evidence-first research | analyst/critic debate | per-dimension challenges"}
           </span>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
           <details ref={exportMenuRef} style={{ position: "relative" }}>
             <summary
               onClick={(e) => {
                 if (!useCases.length) e.preventDefault();
               }}
               style={{
-                background: "#0f1520",
-                border: "1px solid #2d3748",
-                color: useCases.length ? "#93c5fd" : "#374151",
+                background: "var(--ck-surface)",
+                border: "1px solid var(--ck-line)",
+                color: useCases.length ? "var(--ck-blue)" : "#8b95b3",
                 padding: "6px 12px",
                 borderRadius: 8,
                 fontSize: 12,
@@ -152,8 +159,8 @@ export default function App() {
               position: "absolute",
               right: 0,
               top: "calc(100% + 6px)",
-              background: "#0f1520",
-              border: "1px solid #2d3748",
+              background: "var(--ck-surface)",
+              border: "1px solid var(--ck-line)",
               borderRadius: 8,
               minWidth: 185,
               padding: 6,
@@ -176,9 +183,9 @@ export default function App() {
                     exportMenuRef.current?.removeAttribute("open");
                   }}
                   style={{
-                    background: "#0a0d17",
-                    border: "1px solid #1f2937",
-                    color: "#cbd5e1",
+                    background: "var(--ck-surface-soft)",
+                    border: "1px solid var(--ck-line)",
+                    color: "var(--ck-text)",
                     textAlign: "left",
                     borderRadius: 6,
                     fontSize: 12,
@@ -193,15 +200,15 @@ export default function App() {
           <button
             onClick={() => setShowDimsPanel(v => !v)}
             style={{
-              background: showDimsPanel ? "#3b0764" : "#0f1520",
-              border: "1px solid #2d3748", color: "#c084fc",
+              background: showDimsPanel ? "var(--ck-blue-soft)" : "var(--ck-surface)",
+              border: "1px solid var(--ck-line)", color: "var(--ck-blue)",
               padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
             }}>
             Dimensions {showDimsPanel ? "^" : "v"}
           </button>
           <button
             onClick={() => setShowInputPanel(v => !v)}
-            style={{ background: "#7c3aed", border: "none", color: "#fff", padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 700 }}>
+            style={{ background: "var(--ck-blue)", border: "none", color: "#fff", padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 700 }}>
             + Add Use Case
           </button>
         </div>
@@ -209,35 +216,35 @@ export default function App() {
 
       {/* DIMENSIONS PANEL */}
       {showDimsPanel && (
-        <div style={{ background: "#0a0d17", borderBottom: "1px solid #141a28", padding: "16px 20px" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "#a855f7", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+        <div style={{ background: "var(--ck-surface)", borderBottom: "1px solid var(--ck-line)", padding: "16px 20px" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--ck-blue)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
             Scoring Dimensions & Weights - toggle to exclude from weighted score
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))", gap: 10, marginBottom: 12 }}>
             {dims.map(d => (
               <div key={d.id} style={{
-                background: "#0f1520", border: `1px solid ${d.enabled ? "#1e2a3a" : "#141820"}`,
+                background: "var(--ck-surface-soft)", border: `1px solid ${d.enabled ? "var(--ck-line-strong)" : "var(--ck-line)"}`,
                 borderRadius: 8, padding: "10px 14px", opacity: d.enabled ? 1 : 0.5,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
                   <input
                     type="checkbox" checked={d.enabled}
                     onChange={e => setDims(p => p.map(x => x.id === d.id ? { ...x, enabled: e.target.checked } : x))}
-                    style={{ accentColor: "#a855f7", width: 14, height: 14 }} />
-                  <span style={{ fontWeight: 600, fontSize: 12, color: d.enabled ? "#e2e8f0" : "#4b5563" }}>{d.label}</span>
-                  <span style={{ marginLeft: "auto", fontFamily: "monospace", fontSize: 12, color: "#a855f7", fontWeight: 700 }}>{d.weight}%</span>
+                    style={{ accentColor: "var(--ck-blue)", width: 14, height: 14 }} />
+                  <span style={{ fontWeight: 600, fontSize: 12, color: d.enabled ? "var(--ck-text)" : "var(--ck-muted)" }}>{d.label}</span>
+                  <span style={{ marginLeft: "auto", fontFamily: "monospace", fontSize: 12, color: "var(--ck-blue)", fontWeight: 700 }}>{d.weight}%</span>
                 </div>
                 <DimRubricToggle dim={d} />
                 <input
                   type="range" min={1} max={40} step={1} value={d.weight}
                   disabled={!d.enabled}
                   onChange={e => setDims(p => p.map(x => x.id === d.id ? { ...x, weight: +e.target.value } : x))}
-                  style={{ width: "100%", accentColor: "#7c3aed", marginTop: 4 }} />
+                  style={{ width: "100%", accentColor: "var(--ck-blue)", marginTop: 4 }} />
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: "#374151" }}>
-            Total weight: <span style={{ color: "#a855f7", fontWeight: 700 }}>{totalWeight}%</span>
+          <div style={{ fontSize: 11, color: "var(--ck-muted)" }}>
+            Total weight: <span style={{ color: "var(--ck-blue)", fontWeight: 700 }}>{totalWeight}%</span>
             <span style={{ marginLeft: 8 }}>- scores auto-normalize, only relative weights matter</span>
           </div>
         </div>
@@ -245,8 +252,8 @@ export default function App() {
 
       {/* INPUT PANEL */}
       {showInputPanel && (
-        <div style={{ background: "#0a0d17", borderBottom: "1px solid #141a28", padding: "16px 20px" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "#a855f7", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+        <div style={{ background: "var(--ck-surface)", borderBottom: "1px solid var(--ck-line)", padding: "16px 20px" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--ck-blue)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
             New Use Case - describe the problem or solution
           </div>
           <textarea
@@ -256,8 +263,8 @@ export default function App() {
             placeholder={'Vague and high-level is fine. E.g. "AI for insurance claims processing" or "automate contract review for legal teams in financial services" or "predictive maintenance for manufacturing equipment"'}
             onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) startAnalysis(); }}
             style={{
-              width: "100%", height: 90, background: "#07090f", border: "1px solid #2d3748",
-              borderRadius: 8, color: "#e2e8f0", padding: "10px 14px", fontSize: 13,
+              width: "100%", height: 90, background: "var(--ck-surface-soft)", border: "1px solid var(--ck-line-strong)",
+              borderRadius: 8, color: "var(--ck-text)", padding: "10px 14px", fontSize: 13,
               resize: "vertical", lineHeight: 1.5, outline: "none",
             }}
           />
@@ -266,22 +273,22 @@ export default function App() {
               onClick={startAnalysis}
               disabled={!inputText.trim() || globalAnalyzing}
               style={{
-                background: "#7c3aed", border: "none", color: "#fff",
+                background: "var(--ck-blue)", border: "none", color: "#fff",
                 padding: "8px 20px", borderRadius: 8, fontWeight: 700, fontSize: 13,
                 opacity: !inputText.trim() || globalAnalyzing ? 0.5 : 1,
                 display: "flex", alignItems: "center", gap: 6,
               }}>
               {globalAnalyzing ? <><Spinner size={11} color="#fff" /> Analyzing...</> : "Analyze - 3-phase debate"}
             </button>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ck-muted)" }}>
               <span>Mode:</span>
               <select
                 value={analysisMode}
                 onChange={(e) => setAnalysisMode(e.target.value)}
                 style={{
-                  background: "#07090f",
-                  border: "1px solid #2d3748",
-                  color: "#e2e8f0",
+                  background: "var(--ck-surface-soft)",
+                  border: "1px solid var(--ck-line-strong)",
+                  color: "var(--ck-text)",
                   borderRadius: 6,
                   fontSize: 11,
                   padding: "4px 8px",
@@ -291,10 +298,10 @@ export default function App() {
                 <option value="hybrid">Hybrid reliability</option>
               </select>
             </label>
-            <span style={{ fontSize: 11, color: "#2d3748" }}>Cmd/Ctrl+Enter to submit</span>
+            <span style={{ fontSize: 11, color: "var(--ck-muted)" }}>Cmd/Ctrl+Enter to submit</span>
             <button
               onClick={() => setShowInputPanel(false)}
-              style={{ marginLeft: "auto", background: "transparent", border: "1px solid #2d3748", color: "#6b7280", padding: "7px 14px", borderRadius: 8, fontSize: 12 }}>
+              style={{ marginLeft: "auto", background: "transparent", border: "1px solid var(--ck-line-strong)", color: "var(--ck-muted)", padding: "7px 14px", borderRadius: 8, fontSize: 12 }}>
               Cancel
             </button>
           </div>
@@ -304,22 +311,49 @@ export default function App() {
       {/* MAIN TABLE */}
       <div style={{ padding: 20 }}>
         {useCases.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "80px 20px" }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#2d3748", marginBottom: 8 }}>No use cases yet</div>
-            <div style={{ fontSize: 13, color: "#1f2937" }}>
-              Click <strong style={{ color: "#a855f7" }}>+ Add Use Case</strong> {`to start the 3-phase analyst <-> critic analysis`}
+          <div style={{ textAlign: "left", padding: "40px 20px", maxWidth: 760, margin: "0 auto", background: "var(--ck-surface)", borderRadius: 14, border: "1px solid var(--ck-line)" }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "var(--ck-text)", marginBottom: 8, fontFamily: "Aileron, Inter, sans-serif" }}>
+              AI Use Case Researcher
+            </div>
+            <div style={{ fontSize: 13, color: "var(--ck-muted)", marginBottom: 14 }}>
+              Add one use case and the tool will run a structured research workflow:
+            </div>
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, color: "var(--ck-text)", fontSize: 13, lineHeight: 1.6, display: "grid", gap: 8 }}>
+              <li style={{ display: "flex", gap: 8 }}>
+                <span aria-hidden="true">🧠</span>
+                <span><strong>Analyst role:</strong> builds the first assessment with per-dimension scores and reasoning.</span>
+              </li>
+              <li style={{ display: "flex", gap: 8 }}>
+                <span aria-hidden="true">🛡️</span>
+                <span><strong>Critic role:</strong> pressure-tests assumptions and challenges weak or inflated scoring.</span>
+              </li>
+              <li style={{ display: "flex", gap: 8 }}>
+                <span aria-hidden="true">💬</span>
+                <span><strong>Your challenge feature:</strong> you can challenge any dimension and get an updated response and score.</span>
+              </li>
+              <li style={{ display: "flex", gap: 8 }}>
+                <span aria-hidden="true">🔎</span>
+                <span><strong>Data sources:</strong> uses model knowledge and optional live web search, with visible sources per dimension.</span>
+              </li>
+              <li style={{ display: "flex", gap: 8 }}>
+                <span aria-hidden="true">📈</span>
+                <span><strong>Prioritization:</strong> scores 11 weighted dimensions, then calculates a normalized portfolio priority score.</span>
+              </li>
+            </ul>
+            <div style={{ marginTop: 14, fontSize: 13, color: "var(--ck-muted)" }}>
+              Click <strong style={{ color: "var(--ck-blue)" }}>+ Add Use Case</strong> to start.
             </div>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div style={{ overflowX: "auto", border: "1px solid var(--ck-line)", borderRadius: 12, background: "var(--ck-surface)" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 940 }}>
               <thead>
-                <tr style={{ background: "#0a0d17", borderBottom: "2px solid #141a28" }}>
-                  <th style={{ textAlign: "left", padding: "10px 14px", color: "#4b5563", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, minWidth: 200 }}>
+                <tr style={{ background: "var(--ck-surface-soft)", borderBottom: "2px solid var(--ck-line)" }}>
+                  <th style={{ textAlign: "left", padding: "10px 14px", color: "var(--ck-muted)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8, minWidth: 200 }}>
                     Use Case
                   </th>
                   {activeDims.map(d => (
-                    <th key={d.id} style={{ textAlign: "center", padding: "8px 4px", color: "#4b5563", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap", minWidth: 66 }}>
+                    <th key={d.id} style={{ textAlign: "center", padding: "8px 4px", color: "var(--ck-muted)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap", minWidth: 66 }}>
                       {d.label
                         .replace("Applicability", "App.")
                         .replace("Readiness", "Ready")
@@ -328,10 +362,10 @@ export default function App() {
                         .replace("Productization", "Reuse")
                         .replace("Pressure", "Pres.")}
                       <br />
-                      <span style={{ color: "#2d3748", fontWeight: 400 }}>{d.weight}%</span>
+                      <span style={{ color: "var(--ck-muted-soft)", fontWeight: 400 }}>{d.weight}%</span>
                     </th>
                   ))}
-                  <th style={{ textAlign: "center", padding: "10px 14px", color: "#a855f7", fontSize: 11, fontWeight: 700, textTransform: "uppercase", minWidth: 90 }}>
+                  <th style={{ textAlign: "center", padding: "10px 14px", color: "var(--ck-blue)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", minWidth: 90 }}>
                     Score
                   </th>
                   <th style={{ width: 28 }} />
@@ -346,19 +380,19 @@ export default function App() {
                       key={uc.id}
                       onClick={() => setExpandedId(isExpanded ? null : uc.id)}
                       style={{
-                        borderBottom: isExpanded ? "none" : "1px solid #0f1218",
+                        borderBottom: isExpanded ? "none" : "1px solid var(--ck-line)",
                         cursor: "pointer",
-                        background: isExpanded ? "#0a0d17" : "transparent",
+                        background: isExpanded ? "var(--ck-surface-soft)" : "transparent",
                       }}
-                      onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = "#0c0f18"; }}
+                      onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = "#f7f9ff"; }}
                       onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = "transparent"; }}>
                       <td style={{ padding: "12px 14px" }}>
-                        <div style={{ fontWeight: 600, color: "#e2e8f0", marginBottom: 4, lineHeight: 1.3 }}>
+                        <div style={{ fontWeight: 600, color: "var(--ck-text)", marginBottom: 4, lineHeight: 1.3 }}>
                           {uc.attributes?.title || (uc.rawInput.length > 55 ? `${uc.rawInput.slice(0, 55)}...` : uc.rawInput)}
                         </div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           {uc.attributes?.vertical && (
-                            <span style={{ fontSize: 11, color: "#4b5563", background: "#0f1520", padding: "1px 7px", borderRadius: 4 }}>
+                            <span style={{ fontSize: 11, color: "var(--ck-muted)", background: "var(--ck-surface-soft)", border: "1px solid var(--ck-line)", padding: "1px 7px", borderRadius: 4 }}>
                               {uc.attributes.vertical}
                             </span>
                           )}
@@ -367,7 +401,7 @@ export default function App() {
                               title={uc.analysisMeta?.hybridStats
                                 ? `Hybrid changed baseline on ${uc.analysisMeta.hybridStats.changedFromBaseline} dimensions`
                                 : "Hybrid reliability mode"}
-                              style={{ fontSize: 11, color: "#a78bfa", background: "#1b1530", padding: "1px 7px", borderRadius: 4 }}>
+                              style={{ fontSize: 11, color: "var(--ck-blue-ink)", background: "var(--ck-blue-soft)", border: "1px solid #c5ceff", padding: "1px 7px", borderRadius: 4 }}>
                               hybrid
                             </span>
                           )}
@@ -376,7 +410,7 @@ export default function App() {
                               title={uc.analysisMeta?.liveSearchUsed
                                 ? `Live search used (${uc.analysisMeta?.webSearchCalls || 0} calls)`
                                 : "Live search requested, fallback path used"}
-                              style={{ fontSize: 11, color: "#60a5fa", background: "#0a1628", padding: "1px 7px", borderRadius: 4 }}>
+                              style={{ fontSize: 11, color: "var(--ck-blue)", background: "var(--ck-blue-soft)", border: "1px solid #c5ceff", padding: "1px 7px", borderRadius: 4 }}>
                               live
                             </span>
                           )}
@@ -393,7 +427,7 @@ export default function App() {
                               ? <ScorePill score={sc} revised={revised} />
                               : uc.status === "analyzing"
                                 ? <Spinner size={10} />
-                                : <span style={{ color: "#2d3748" }}>-</span>}
+                                : <span style={{ color: "var(--ck-muted)" }}>-</span>}
                           </td>
                         );
                       })}
@@ -403,10 +437,10 @@ export default function App() {
                           : uc.status === "error"
                             ? <span style={{ color: "#ef4444", fontSize: 11 }}>Error</span>
                             : uc.status === "analyzing"
-                              ? <span style={{ color: "#4b5563", fontSize: 11 }}>{PHASE_LABEL_SHORT[uc.phase] || "..."}</span>
+                              ? <span style={{ color: "var(--ck-muted)", fontSize: 11 }}>{PHASE_LABEL_SHORT[uc.phase] || "..."}</span>
                               : "-"}
                       </td>
-                      <td style={{ textAlign: "center", color: "#374151", fontSize: 12 }}>
+                      <td style={{ textAlign: "center", color: "var(--ck-muted)", fontSize: 12 }}>
                         {isExpanded ? "^" : "v"}
                       </td>
                     </tr>,

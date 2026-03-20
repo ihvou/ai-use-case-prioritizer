@@ -257,9 +257,9 @@ function section(label, body, className = "") {
 
 function renderUseCaseSummaryPage(uc, dims, index, options = {}) {
   const mode = options.mode || "html";
-  const briefWordCap = mode === "pdf" ? 14 : 20;
-  const summaryWordCap = mode === "pdf" ? 34 : 52;
-  const conclusionWordCap = mode === "pdf" ? 42 : 58;
+  const briefWordCap = mode === "pdf" ? 10 : 12;
+  const summaryWordCap = mode === "pdf" ? 22 : 28;
+  const conclusionWordCap = mode === "pdf" ? 26 : 30;
 
   const title = uc.attributes?.title || uc.rawInput || `Use case ${index + 1}`;
   const weighted = calcWeightedScore(uc, dims);
@@ -278,7 +278,7 @@ function renderUseCaseSummaryPage(uc, dims, index, options = {}) {
         </div>
         <div class="dim-score" style="color:${escapeHtml(color)}">${score == null ? "-" : `${escapeHtml(score)}/5`}</div>
         <div class="dim-brief">${escapeHtml(limitWords(view.brief || "No brief available.", briefWordCap))}</div>
-        ${citationBadgesHtml(view.sources)}
+        ${citationBadgesHtml((view.sources || []).slice(0, 1))}
       </div>
     `;
   }).join("");
@@ -447,7 +447,8 @@ function reportCss(mode = "html") {
     }
     .score-hero {
       display: flex;
-      align-items: baseline;
+      flex-wrap: wrap;
+      align-items: flex-end;
       gap: 12px;
       margin-top: 12px;
       margin-bottom: 12px;
@@ -456,23 +457,27 @@ function reportCss(mode = "html") {
       font-size: ${isPdf ? "62px" : "68px"};
       font-weight: 800;
       line-height: 0.95;
+      white-space: nowrap;
     }
     .score-tier {
       font-size: 20px;
       font-weight: 700;
       color: var(--ink);
+      white-space: nowrap;
+      line-height: 1.1;
+      margin-bottom: ${isPdf ? "6px" : "8px"};
     }
     .summary-desc {
-      font-size: ${isPdf ? "15px" : "17px"};
+      font-size: ${isPdf ? "14px" : "15px"};
       color: #1e293b;
-      margin: 10px 0 12px;
+      margin: 8px 0 10px;
       font-weight: 500;
     }
     .meta-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px 16px;
-      margin-bottom: 16px;
+      gap: 6px 14px;
+      margin-bottom: 10px;
     }
     .meta-grid > div {
       display: flex;
@@ -494,15 +499,15 @@ function reportCss(mode = "html") {
       color: #0f172a;
     }
     .dim-grid {
-      margin-top: 12px;
+      margin-top: 8px;
       display: grid;
-      grid-template-columns: repeat(${isPdf ? 2 : 3}, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(${isPdf ? 3 : 4}, minmax(0, 1fr));
+      gap: 6px;
     }
     .dim-card {
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 9px 10px;
+      padding: 7px 8px;
       background: #fcfdff;
     }
     .dim-head {
@@ -510,10 +515,10 @@ function reportCss(mode = "html") {
       justify-content: space-between;
       align-items: baseline;
       gap: 8px;
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
     .dim-name {
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 700;
       color: #0f172a;
     }
@@ -523,31 +528,31 @@ function reportCss(mode = "html") {
       font-weight: 700;
     }
     .dim-score {
-      font-size: ${isPdf ? "24px" : "26px"};
+      font-size: ${isPdf ? "20px" : "22px"};
       font-weight: 800;
       line-height: 1;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .dim-brief {
-      font-size: ${isPdf ? "12px" : "13px"};
+      font-size: ${isPdf ? "10px" : "11px"};
       font-weight: 700;
       color: #1e293b;
-      line-height: 1.25;
+      line-height: 1.2;
     }
     .citation-line {
-      margin-top: 8px;
+      margin-top: 5px;
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px;
     }
     .citation-badge {
       display: inline-block;
       border: 1px solid #bfdbfe;
       background: #eff6ff;
       color: #1d4ed8;
-      font-size: 11px;
+      font-size: 9px;
       font-weight: 700;
-      padding: 2px 7px;
+      padding: 1px 6px;
       border-radius: 999px;
       line-height: 1.3;
     }
@@ -728,7 +733,7 @@ function reportCss(mode = "html") {
         font-size: 58px;
       }
       .dim-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .score-brief-band {
         grid-template-columns: 1fr;
