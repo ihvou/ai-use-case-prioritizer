@@ -2,10 +2,14 @@ import { callAnalystAPI, callCriticAPI } from "../lib/api";
 import { safeParseJSON, buildDimRubrics } from "../lib/json";
 import { SYS_ANALYST, SYS_CRITIC, SYS_ANALYST_RESPONSE } from "../prompts/system";
 
-export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
-  const liveSearch = !!options.liveSearch;
+function buildDimJsonTemplate(dims, condensed = false) {
+  if (condensed) {
+    return dims.map((d) =>
+      `"${d.id}": {"score": <1-5>, "brief": "<max 20 words>", "full": "<1 paragraph, max 80 words, cite 1-2 named companies>", "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}], "risks": "<max 20 words>"}`
+    ).join(",\n    ");
+  }
 
-  const dimJsonTemplate = dims.map((d) =>
+  return dims.map((d) =>
     `"${d.id}": {
       "score": <integer 1-5 based on rubric>,
       "brief": "<single sentence summary, max 25 words>",
@@ -16,7 +20,9 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
       "risks": "<1-2 sentences on key risks or caveats for this dimension>"
     }`
   ).join(",\n    ");
+}
 
+function buildPhase1Prompt(desc, dims, { liveSearch = false, condensed = false } = {}) {
   const liveSearchBlock = liveSearch
     ? `\nLIVE SEARCH MODE:
 - Use web search to verify high-confidence claims.
@@ -24,16 +30,10 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
 - Include real URLs for each dimension when available.\n`
     : "";
 
-  const phase1Prompt = `Analyze this AI use case for an outsourcing company that builds CUSTOM AI solutions for enterprise clients:
-
-"${desc}"
-
-SCORING DIMENSIONS - use the rubric below to score each one 1-5:
-${buildDimRubrics(dims)}${liveSearchBlock}
-Return ONLY this exact JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
-
-{
-  "attributes": {
+  const dimTemplate = buildDimJsonTemplate(dims, condensed);
+  const attributesTemplate = condensed
+    ? `{"title": "<max 8 words>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
+    : `{
     "title": "<descriptive title, max 8 words>",
     "expandedDescription": "<2-3 sentences: what the AI does, how it creates value, why an outsourcer should care>",
     "vertical": "<primary industry vertical>",
@@ -41,71 +41,221 @@ Return ONLY this exact JSON structure, fully populated for ALL 11 dimension IDs 
     "aiSolutionType": "<specific AI/ML technology type>",
     "typicalTimeline": "<realistic end-to-end delivery estimate>",
     "deliveryModel": "<how outsourcer engages: build-and-transfer, managed service, etc>"
-  },
-  "dimensions": {
-    ${dimJsonTemplate}
-  }
-}`;
+  }`;
 
-  const debate = [];
-  const analysisMeta = {
-    liveSearchRequested: liveSearch,
-    liveSearchUsed: false,
-    webSearchCalls: 0,
-    liveSearchFallbackReason: null,
-  };
-
-  const absorbMeta = (meta) => {
-    if (!meta) return;
-    if (meta.liveSearchUsed) analysisMeta.liveSearchUsed = true;
-    analysisMeta.webSearchCalls += Number(meta.webSearchCalls || 0);
-    if (!analysisMeta.liveSearchFallbackReason && meta.liveSearchFallbackReason) {
-      analysisMeta.liveSearchFallbackReason = meta.liveSearchFallbackReason;
-    }
-  };
-
-  // Phase 1: Analyst
-  updateUC(id, (u) => ({ ...u, phase: "analyst" }));
-  let r1;
-  let p1;
-  try {
-    const phase1Res = await callAnalystAPI(
-      [{ role: "user", content: phase1Prompt }],
-      SYS_ANALYST,
-      12000,
-      { liveSearch, includeMeta: true }
-    );
-    absorbMeta(phase1Res.meta);
-    r1 = phase1Res.text;
-    p1 = safeParseJSON(r1);
-  } catch (parseErr) {
-    console.warn("Phase 1 parse failed, retrying with condensed prompt:", parseErr.message);
-    const condensedDimTemplate = dims.map((d) =>
-      `"${d.id}": {"score": <1-5>, "brief": "<max 20 words>", "full": "<1 paragraph, max 80 words, cite 1-2 named companies>", "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}], "risks": "<max 20 words>"}`
-    ).join(",\n    ");
-    const condensedPrompt = `Analyze this AI use case for an outsourcing company building CUSTOM AI solutions:
+  return `Analyze this AI use case for an outsourcing company that builds CUSTOM AI solutions for enterprise clients:
 
 "${desc}"
 
-SCORING DIMENSIONS (score each 1-5 using these rubrics):
+SCORING DIMENSIONS - use the rubric below to score each one 1-5:
 ${buildDimRubrics(dims)}${liveSearchBlock}
-Return ONLY this JSON (ALL 11 dimension IDs: ${dims.map((d) => d.id).join(", ")}):
+Return ONLY this JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
+
 {
-  "attributes": {"title": "<max 8 words>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"},
+  "attributes": ${attributesTemplate},
   "dimensions": {
-    ${condensedDimTemplate}
+    ${dimTemplate}
   }
 }`;
+}
+
+function clip(text, max = 260) {
+  if (!text) return "";
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 3)}...`;
+}
+
+function sourceSummary(sources = []) {
+  if (!sources?.length) return "none";
+  return sources
+    .slice(0, 3)
+    .map((s) => `${s.name || "unknown"}${s.url ? ` (${s.url})` : ""}`)
+    .join("; ");
+}
+
+function buildHybridReconcilePrompt(desc, dims, baseline, web, condensed = false) {
+  const comparison = dims.map((d) => {
+    const b = baseline?.dimensions?.[d.id] || {};
+    const w = web?.dimensions?.[d.id] || {};
+    return [
+      `DIMENSION: ${d.label} [${d.id}]`,
+      `BASELINE score: ${b.score ?? "n/a"}/5`,
+      `BASELINE brief: "${clip(b.brief, 180)}"`,
+      `BASELINE sources: ${sourceSummary(b.sources)}`,
+      `BASELINE full snapshot: "${clip(b.full, 320)}"`,
+      `WEB score: ${w.score ?? "n/a"}/5`,
+      `WEB brief: "${clip(w.brief, 180)}"`,
+      `WEB sources: ${sourceSummary(w.sources)}`,
+      `WEB full snapshot: "${clip(w.full, 320)}"`,
+    ].join("\n");
+  }).join("\n\n");
+
+  const dimTemplate = buildDimJsonTemplate(dims, condensed);
+  const attrsTemplate = condensed
+    ? `{"title": "<max 8 words>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
+    : `{
+    "title": "<descriptive title, max 8 words>",
+    "expandedDescription": "<2-3 sentences: what the AI does, how it creates value, why an outsourcer should care>",
+    "vertical": "<primary industry vertical>",
+    "buyerPersona": "<job title of primary decision maker>",
+    "aiSolutionType": "<specific AI/ML technology type>",
+    "typicalTimeline": "<realistic end-to-end delivery estimate>",
+    "deliveryModel": "<how outsourcer engages: build-and-transfer, managed service, etc>"
+  }`;
+
+  return `You are a reliability reviewer combining two analyst drafts for the same use case.
+Use case: "${desc}"
+
+DRAFT A (BASELINE): no live web search.
+Attributes A:
+${JSON.stringify(baseline?.attributes || {}, null, 2)}
+
+DRAFT B (WEB): live web-search assisted.
+Attributes B:
+${JSON.stringify(web?.attributes || {}, null, 2)}
+
+Per-dimension comparison:
+${comparison}
+
+Rules:
+- Prefer points backed by strong, verifiable evidence.
+- Do not overreact to weak web snippets.
+- If changing a baseline score by 2+ points, ensure the full reasoning clearly justifies the change.
+- Keep the same outsourcing-delivery framing.
+
+Return ONLY this JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
+{
+  "attributes": ${attrsTemplate},
+  "dimensions": {
+    ${dimTemplate}
+  }
+}`;
+}
+
+function calcWeightedFromDimScores(dimScores, dims) {
+  let wSum = 0;
+  let wTotal = 0;
+  dims.forEach((d) => {
+    const score = Number(dimScores?.[d.id]?.score);
+    if (Number.isFinite(score)) {
+      wSum += score * d.weight;
+      wTotal += d.weight;
+    }
+  });
+  if (!wTotal) return null;
+  return Number(((wSum / wTotal / 5) * 100).toFixed(1));
+}
+
+function computeHybridDeltaStats(dims, baseline, web, final) {
+  let changedFromBaseline = 0;
+  let changedFromWeb = 0;
+  let largeDeltaFromBaseline = 0;
+
+  dims.forEach((d) => {
+    const bs = Number(baseline?.dimensions?.[d.id]?.score);
+    const ws = Number(web?.dimensions?.[d.id]?.score);
+    const fs = Number(final?.dimensions?.[d.id]?.score);
+
+    if (!Number.isFinite(fs)) return;
+    if (Number.isFinite(bs) && fs !== bs) changedFromBaseline += 1;
+    if (Number.isFinite(ws) && fs !== ws) changedFromWeb += 1;
+    if (Number.isFinite(bs) && Math.abs(fs - bs) >= 2) largeDeltaFromBaseline += 1;
+  });
+
+  return {
+    changedFromBaseline,
+    changedFromWeb,
+    largeDeltaFromBaseline,
+    baselineWeightedScore: calcWeightedFromDimScores(baseline?.dimensions, dims),
+    webWeightedScore: calcWeightedFromDimScores(web?.dimensions, dims),
+    reconciledWeightedScore: calcWeightedFromDimScores(final?.dimensions, dims),
+  };
+}
+
+function absorbMeta(analysisMeta, meta) {
+  if (!meta) return;
+  if (meta.liveSearchUsed) analysisMeta.liveSearchUsed = true;
+  analysisMeta.webSearchCalls += Number(meta.webSearchCalls || 0);
+  if (!analysisMeta.liveSearchFallbackReason && meta.liveSearchFallbackReason) {
+    analysisMeta.liveSearchFallbackReason = meta.liveSearchFallbackReason;
+  }
+}
+
+async function runAnalystPass(promptBuilder, analysisMeta, { liveSearch = false, maxTokens = 12000 }) {
+  try {
+    const fullPrompt = promptBuilder(false);
+    const fullRes = await callAnalystAPI(
+      [{ role: "user", content: fullPrompt }],
+      SYS_ANALYST,
+      maxTokens,
+      { liveSearch, includeMeta: true }
+    );
+    absorbMeta(analysisMeta, fullRes.meta);
+    return safeParseJSON(fullRes.text);
+  } catch (parseErr) {
+    console.warn("Analyst parse failed, retrying with condensed prompt:", parseErr.message);
+    const condensedPrompt = promptBuilder(true);
     const condensedRes = await callAnalystAPI(
       [{ role: "user", content: condensedPrompt }],
       SYS_ANALYST,
       8000,
       { liveSearch, includeMeta: true }
     );
-    absorbMeta(condensedRes.meta);
-    r1 = condensedRes.text;
-    p1 = safeParseJSON(r1);
+    absorbMeta(analysisMeta, condensedRes.meta);
+    return safeParseJSON(condensedRes.text);
   }
+}
+
+async function runHybridPhase1(desc, dims, updateUC, id, analysisMeta) {
+  updateUC(id, (u) => ({ ...u, phase: "analyst_baseline" }));
+  const baseline = await runAnalystPass(
+    (condensed) => buildPhase1Prompt(desc, dims, { liveSearch: false, condensed }),
+    analysisMeta,
+    { liveSearch: false, maxTokens: 12000 }
+  );
+
+  updateUC(id, (u) => ({ ...u, phase: "analyst_web" }));
+  const web = await runAnalystPass(
+    (condensed) => buildPhase1Prompt(desc, dims, { liveSearch: true, condensed }),
+    analysisMeta,
+    { liveSearch: true, maxTokens: 12000 }
+  );
+
+  updateUC(id, (u) => ({ ...u, phase: "analyst_reconcile" }));
+  const reconciled = await runAnalystPass(
+    (condensed) => buildHybridReconcilePrompt(desc, dims, baseline, web, condensed),
+    analysisMeta,
+    { liveSearch: false, maxTokens: 12000 }
+  );
+
+  analysisMeta.hybridStats = computeHybridDeltaStats(dims, baseline, web, reconciled);
+  return reconciled;
+}
+
+export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
+  const analysisMode = options.analysisMode || (options.liveSearch ? "live_search" : "standard");
+  const liveSearch = analysisMode === "live_search";
+
+  const debate = [];
+  const analysisMeta = {
+    analysisMode,
+    liveSearchRequested: analysisMode !== "standard",
+    liveSearchUsed: false,
+    webSearchCalls: 0,
+    liveSearchFallbackReason: null,
+    hybridStats: null,
+  };
+
+  // Phase 1: Analyst
+  updateUC(id, (u) => ({ ...u, phase: analysisMode === "hybrid" ? "analyst_baseline" : "analyst" }));
+
+  const p1 = analysisMode === "hybrid"
+    ? await runHybridPhase1(desc, dims, updateUC, id, analysisMeta)
+    : await runAnalystPass(
+      (condensed) => buildPhase1Prompt(desc, dims, { liveSearch, condensed }),
+      analysisMeta,
+      { liveSearch, maxTokens: 12000 }
+    );
 
   debate.push({ phase: "initial", content: p1 });
   updateUC(id, (u) => ({

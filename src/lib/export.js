@@ -56,9 +56,16 @@ export function exportSummaryCsv(useCases, dims) {
     "typical_timeline",
     "delivery_model",
     "weighted_score_pct",
+    "analysis_mode",
     "live_search_requested",
     "live_search_used",
     "web_search_calls",
+    "hybrid_changed_from_baseline",
+    "hybrid_changed_from_web",
+    "hybrid_large_delta_from_baseline",
+    "hybrid_baseline_weighted_score",
+    "hybrid_web_weighted_score",
+    "hybrid_reconciled_weighted_score",
     "conclusion",
     "raw_input",
     ...getScoreColumns(dims),
@@ -75,9 +82,16 @@ export function exportSummaryCsv(useCases, dims) {
       typical_timeline: uc.attributes?.typicalTimeline || "",
       delivery_model: uc.attributes?.deliveryModel || "",
       weighted_score_pct: calcWeightedScore(uc, dims) ?? "",
+      analysis_mode: uc.analysisMeta?.analysisMode || "standard",
       live_search_requested: uc.analysisMeta?.liveSearchRequested ? "yes" : "no",
       live_search_used: uc.analysisMeta?.liveSearchUsed ? "yes" : "no",
       web_search_calls: uc.analysisMeta?.webSearchCalls ?? 0,
+      hybrid_changed_from_baseline: uc.analysisMeta?.hybridStats?.changedFromBaseline ?? "",
+      hybrid_changed_from_web: uc.analysisMeta?.hybridStats?.changedFromWeb ?? "",
+      hybrid_large_delta_from_baseline: uc.analysisMeta?.hybridStats?.largeDeltaFromBaseline ?? "",
+      hybrid_baseline_weighted_score: uc.analysisMeta?.hybridStats?.baselineWeightedScore ?? "",
+      hybrid_web_weighted_score: uc.analysisMeta?.hybridStats?.webWeightedScore ?? "",
+      hybrid_reconciled_weighted_score: uc.analysisMeta?.hybridStats?.reconciledWeightedScore ?? "",
       conclusion: uc.finalScores?.conclusion || "",
       raw_input: uc.rawInput || "",
     };
@@ -96,6 +110,7 @@ export function exportDetailCsv(useCases, dims) {
   const headers = [
     "use_case_id",
     "use_case_title",
+    "analysis_mode",
     "dimension_id",
     "dimension_label",
     "dimension_weight_pct",
@@ -129,6 +144,7 @@ export function exportDetailCsv(useCases, dims) {
       rows.push({
         use_case_id: uc.id,
         use_case_title: uc.attributes?.title || uc.rawInput || "",
+        analysis_mode: uc.analysisMeta?.analysisMode || "standard",
         dimension_id: d.id,
         dimension_label: d.label,
         dimension_weight_pct: d.weight,
@@ -153,4 +169,3 @@ export function exportDetailCsv(useCases, dims) {
 
   downloadCsv(`use-case-detail-${timestampTag()}.csv`, rowsToCsv(headers, rows));
 }
-

@@ -18,7 +18,7 @@ export default function App() {
   const [showDimsPanel, setShowDimsPanel] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [globalAnalyzing, setGlobalAnalyzing] = useState(false);
-  const [liveSearch, setLiveSearch] = useState(true);
+  const [analysisMode, setAnalysisMode] = useState("live_search");
   const [fuInputs, setFuInputs] = useState({});
   const [fuLoading, setFuLoading] = useState({});
 
@@ -38,15 +38,18 @@ export default function App() {
     if (!desc || globalAnalyzing) return;
 
     const id = Date.now().toString();
+    const initialPhase = analysisMode === "hybrid" ? "analyst_baseline" : "analyst";
     const blankUC = {
-      id, rawInput: desc, status: "analyzing", phase: "analyst",
+      id, rawInput: desc, status: "analyzing", phase: initialPhase,
       attributes: null, dimScores: null, critique: null, finalScores: null,
       debate: [], followUps: {}, errorMsg: null,
       analysisMeta: {
-        liveSearchRequested: liveSearch,
+        analysisMode,
+        liveSearchRequested: analysisMode !== "standard",
         liveSearchUsed: false,
         webSearchCalls: 0,
         liveSearchFallbackReason: null,
+        hybridStats: null,
       },
     };
 
@@ -57,7 +60,7 @@ export default function App() {
     setGlobalAnalyzing(true);
 
     try {
-      await runAnalysis(desc, dims, updateUC, id, { liveSearch });
+      await runAnalysis(desc, dims, updateUC, id, { analysisMode });
     } catch (err) {
       console.error("Analysis error:", err);
       updateUC(id, u => ({ ...u, status: "error", phase: "error", errorMsg: err.message }));
@@ -101,6 +104,9 @@ export default function App() {
 
   const PHASE_LABEL_SHORT = {
     analyst: "Research...",
+    analyst_baseline: "Baseline pass...",
+    analyst_web: "Web pass...",
+    analyst_reconcile: "Reconcile pass...",
     critic: "Critique...",
     finalizing: "Debate...",
   };
@@ -234,13 +240,22 @@ export default function App() {
               {globalAnalyzing ? <><Spinner size={11} color="#fff" /> Analyzing...</> : "Analyze - 3-phase debate"}
             </button>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8" }}>
-              <input
-                type="checkbox"
-                checked={liveSearch}
-                onChange={(e) => setLiveSearch(e.target.checked)}
-                style={{ accentColor: "#7c3aed", width: 14, height: 14 }}
-              />
-              Live search (slower, better evidence)
+              <span>Mode:</span>
+              <select
+                value={analysisMode}
+                onChange={(e) => setAnalysisMode(e.target.value)}
+                style={{
+                  background: "#07090f",
+                  border: "1px solid #2d3748",
+                  color: "#e2e8f0",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "4px 8px",
+                }}>
+                <option value="standard">Standard (fastest)</option>
+                <option value="live_search">Live search</option>
+                <option value="hybrid">Hybrid reliability</option>
+              </select>
             </label>
             <span style={{ fontSize: 11, color: "#2d3748" }}>Cmd/Ctrl+Enter to submit</span>
             <button
@@ -313,7 +328,16 @@ export default function App() {
                               {uc.attributes.vertical}
                             </span>
                           )}
-                          {uc.analysisMeta?.liveSearchRequested && (
+                          {uc.analysisMeta?.analysisMode === "hybrid" && (
+                            <span
+                              title={uc.analysisMeta?.hybridStats
+                                ? `Hybrid changed baseline on ${uc.analysisMeta.hybridStats.changedFromBaseline} dimensions`
+                                : "Hybrid reliability mode"}
+                              style={{ fontSize: 11, color: "#a78bfa", background: "#1b1530", padding: "1px 7px", borderRadius: 4 }}>
+                              hybrid
+                            </span>
+                          )}
+                          {uc.analysisMeta?.analysisMode === "live_search" && (
                             <span
                               title={uc.analysisMeta?.liveSearchUsed
                                 ? `Live search used (${uc.analysisMeta?.webSearchCalls || 0} calls)`

@@ -9,7 +9,7 @@ Internal tool for an AI outsourcing company's product & GTM team. Takes a vague 
 3. **Phase 2 — Critic** challenges overconfident scores, names real SaaS incumbents and counter-evidence
 4. **Phase 3 — Analyst responds** per dimension — concedes with revised score or defends with new evidence
 5. PM sees a scored table with expandable detail and can **challenge any dimension directly** via a follow-up thread, triggering a new Analyst response
-6. PM can enable **Live search** for Phase 1 and export results to **Summary CSV** and **Detail CSV**
+6. PM selects an analysis mode (**Standard**, **Live search**, or **Hybrid reliability**) and can export results to **Summary CSV** and **Detail CSV**
 
 ## Key design decisions
 
@@ -18,6 +18,7 @@ Internal tool for an AI outsourcing company's product & GTM team. Takes a vague 
 - **Evidence-first scoring** — Analyst is instructed to cite named companies with specific metrics and real URLs. Scores without evidence are invalid
 - **Multi-LLM debate** — Analyst uses OpenAI GPT-5.4 mini, Critic uses OpenAI GPT-5.4. Architecture supports swapping to other models via the API route layer
 - **Live-search with fallback** — Analyst route attempts OpenAI Responses API web search (`web_search` / `web_search_preview`) and falls back to standard completion if unavailable
+- **Hybrid reliability mode** — runs baseline (no web) + web-assisted draft, then reconciles both into a final Phase 1 result to reduce overreaction to weak web snippets
 - **Per-dimension follow-up threads** — PM can challenge any individual dimension score in a collapsible thread; score revisions propagate to the weighted total
 - **Layered exports** — Summary CSV for fast scanning and Detail CSV for full per-dimension reasoning, critique, sources, and thread history
 
@@ -45,7 +46,8 @@ Each dimension has a 5-level rubric with named examples baked into both the LLM 
 - **AI (Analyst)**: OpenAI GPT-5.4 mini via `/api/analyst.js` serverless function
 - **AI (Critic)**: OpenAI GPT-5.4 via `/api/critic.js` serverless function
 - **API routes**: Vercel serverless functions in `api/` — keys stay server-side
-- **Optional live web**: OpenAI Responses API tools for analyst Phase 1 (opt-in)
+- **Analysis modes**: Standard (no web), Live search (web-assisted), Hybrid reliability (baseline + web + reconciliation)
+- **Optional live web**: OpenAI Responses API tools for analyst Phase 1 when mode uses web
 - **Styling**: Inline styles, dark theme (`#07090f` base)
 - **Storage**: In-memory React state only — no persistence between sessions yet
 
@@ -75,7 +77,7 @@ ai-use-case-prioritizer/
     constants/
       dimensions.js     # 11 dimensions with rubrics & weights
     hooks/
-      useAnalysis.js    # 3-phase analysis orchestration
+      useAnalysis.js    # 3-phase analysis orchestration + mode-aware Phase 1 (standard/live/hybrid)
       useFollowUp.js    # Per-dimension follow-up
     lib/
       api.js            # API call helpers
@@ -126,3 +128,4 @@ The `docs/` folder contains the research report this tool was designed around:
 - No session persistence — refreshing loses all use cases
 - Live search can increase variance in scores depending on source freshness/availability
 - Live search may fall back to non-search mode when web tool path is unavailable
+- Hybrid reliability mode is slower/costlier because it runs three analyst passes before Critic

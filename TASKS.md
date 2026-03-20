@@ -29,14 +29,15 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 ### [~] T-04: Web search integration for Phase 1
 **What**: Enable the Analyst to fetch live market data before scoring — vendor pages, press releases, recent case studies, pricing pages.
 **What's done**:
-- [x] Added opt-in "Live search" checkbox in UI
+- [x] Added opt-in analysis mode selector in UI (standard/live_search/hybrid)
 - [x] Wired `liveSearch` through analysis flow into analyst API
 - [x] Added analyst Responses API path with `web_search` / `web_search_preview`
 - [x] Added safe fallback to standard completion if web tool path fails
 - [x] Added per-use-case metadata (`liveSearchRequested`, `liveSearchUsed`, `webSearchCalls`) in UI + CSV export
+- [x] Implemented hybrid reliability flow (baseline pass + web pass + reconcile pass)
+- [x] Added hybrid delta metadata (`changedFromBaseline`, weighted baseline/web/reconciled) to UI + summary export
 **Impact**: Sources become verifiable real URLs instead of training-knowledge-based citations. Scores reflect current market (new entrants, recent acquisitions, pricing changes).
 **Remaining**:
-- [ ] Add stronger reliability guardrails (hybrid baseline + web reconciliation pass, delta thresholds)
 - [ ] Add recency/source quality badges per citation
 - [ ] Decide whether Critic/Follow-up phases should optionally use live search too
 

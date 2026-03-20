@@ -6,6 +6,9 @@ import DebateTab from "./DebateTab";
 
 const PHASE_LABELS = {
   analyst: "Analyst researching...",
+  analyst_baseline: "Analyst baseline pass...",
+  analyst_web: "Analyst web pass...",
+  analyst_reconcile: "Analyst reconcile pass...",
   critic: "Critic reviewing...",
   finalizing: "Analyst responding...",
 };
@@ -41,9 +44,19 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
               </span>
             : <span style={{ color: "#2d3748" }}>
                 Analyst: OpenAI GPT-5.4 mini | Critic: OpenAI GPT-5.4 | Sources may include model memory and live web - verify before use
+                {uc.analysisMeta?.analysisMode && (
+                  <span style={{ marginLeft: 6 }}>
+                    | Mode: {uc.analysisMeta.analysisMode === "hybrid" ? "hybrid reliability" : uc.analysisMeta.analysisMode}
+                  </span>
+                )}
                 {uc.analysisMeta?.liveSearchRequested && (
                   <span style={{ marginLeft: 6, color: "#60a5fa" }}>
                     | Live search {uc.analysisMeta?.liveSearchUsed ? `on (${uc.analysisMeta?.webSearchCalls || 0} calls)` : "fallback"}
+                  </span>
+                )}
+                {uc.analysisMeta?.hybridStats && (
+                  <span style={{ marginLeft: 6, color: "#a78bfa" }}>
+                    | Hybrid delta: {uc.analysisMeta.hybridStats.changedFromBaseline} dims
                   </span>
                 )}
               </span>}
