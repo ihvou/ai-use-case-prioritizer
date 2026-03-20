@@ -115,10 +115,42 @@ function limitWords(text, maxWords) {
   return `${parts.slice(0, maxWords).join(" ")}...`;
 }
 
-function shortUrl(url, max = 80) {
-  if (!url) return "";
-  if (url.length <= max) return url;
-  return `${url.slice(0, max - 3)}...`;
+const URL_PATTERN = /https?:\/\/[^\s<>"']+/g;
+
+function trimUrlSuffix(raw) {
+  if (!raw) return { url: "", trailing: "" };
+  const clean = String(raw).replace(/[),.;!?]+$/g, "");
+  return { url: clean, trailing: String(raw).slice(clean.length) };
+}
+
+function sourceLabel(n) {
+  return `Source ${n}`;
+}
+
+function createSourceUrlMap(sources = []) {
+  const map = new Map();
+  sources.forEach((s, idx) => {
+    const { url } = trimUrlSuffix(s?.url || "");
+    if (url && !map.has(url)) map.set(url, sourceLabel(idx + 1));
+  });
+  return map;
+}
+
+function replaceUrlsWithSourceLabels(text, sources = []) {
+  if (!text) return "";
+  const known = createSourceUrlMap(sources);
+  let next = known.size + 1;
+  return String(text).replace(URL_PATTERN, (raw) => {
+    const { url, trailing } = trimUrlSuffix(raw);
+    if (!url) return raw;
+    let label = known.get(url);
+    if (!label) {
+      label = sourceLabel(next);
+      known.set(url, label);
+      next += 1;
+    }
+    return `${label}${trailing}`;
+  });
 }
 
 function safeFilePart(value, fallback = "use-case") {
@@ -168,22 +200,22 @@ function sectionIcon(label) {
   return map[label] || "📌";
 }
 
-function sourceListHtml(sources = [], options = {}) {
-  const {
-    maxItems = 6,
-    maxQuoteWords = 18,
-    maxUrlLen = 90,
-  } = options;
+function sourceChipArrayHtml(sources = [], options = {}) {
+  const { maxItems = 12 } = options;
   if (!sources?.length) return "<div class=\"muted\">No sources available.</div>";
-  const items = sources.slice(0, maxItems).map((s) => {
-    const name = escapeHtml(s?.name || "Unknown source");
-    const quote = s?.quote ? `<div class="source-quote">${escapeHtml(limitWords(s.quote, maxQuoteWords))}</div>` : "";
-    const url = s?.url
-      ? `<a class="source-url" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortUrl(s.url, maxUrlLen))}</a>`
-      : "";
-    return `<li class="source-item"><div class="source-name">${name}</div>${quote}${url}</li>`;
+  const chips = sources.slice(0, maxItems).map((s, idx) => {
+    const label = sourceLabel(idx + 1);
+    const note = [s?.name, s?.quote ? limitWords(s.quote, 14) : ""].filter(Boolean).join(" - ");
+    const title = note ? ` title="${escapeHtml(note)}"` : "";
+    if (s?.url) {
+      return `<a class="source-chip" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer"${title}>${escapeHtml(label)}</a>`;
+    }
+    return `<span class="source-chip source-chip-static"${title}>${escapeHtml(label)}</span>`;
   }).join("");
-  return `<ul class="source-list">${items}</ul>`;
+  const extra = sources.length > maxItems
+    ? `<span class="source-chip source-chip-static">+${sources.length - maxItems}</span>`
+    : "";
+  return `<div class="source-chip-array">${chips}${extra}</div>`;
 }
 
 function citationBadgesHtml(sources = []) {
@@ -290,6 +322,10 @@ function renderDimensionPage(uc, d, options = {}) {
   const riskWords = mode === "pdf" ? 45 : 60;
   const criticWords = mode === "pdf" ? 40 : 52;
   const analystWords = mode === "pdf" ? 46 : 60;
+  const fullWithSourceLabels = replaceUrlsWithSourceLabels(
+    view.full || "No full analysis available.",
+    view.sources || []
+  );
 
   const debateBody = `
     <div class="small-text"><strong>Critic:</strong> ${escapeHtml(limitWords(critic?.critique || "No critic comment.", criticWords))}</div>
@@ -307,12 +343,12 @@ function renderDimensionPage(uc, d, options = {}) {
         <div class="big-score" style="color:${escapeHtml(scoreColor)}">${score == null ? "-" : `${escapeHtml(score)}/5`}</div>
         <div class="big-brief">${escapeHtml(limitWords(view.brief || "No brief summary available.", bigBriefWords))}</div>
       </div>
-      ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(limitWords(view.full || "No full analysis available.", fullWords))}</div>`)}
+      ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(limitWords(fullWithSourceLabels, fullWords))}</div>`)}
       ${section("Risks", `<div class="small-text pre-wrap">${escapeHtml(limitWords(view.risks || "No risk notes provided.", riskWords))}</div>`)}
-      ${section("Sources", sourceListHtml(view.sources, { maxItems: mode === "pdf" ? 4 : 5, maxQuoteWords: 12, maxUrlLen: 66 }), "compact")}
+      ${section("Sources", sourceChipArrayHtml(view.sources, { maxItems: mode === "pdf" ? 9 : 12 }), "compact")}
       ${section("Debate", debateBody, "compact")}
       ${section("Follow-up Thread", threadHistoryHtml(uc.followUps?.[d.id] || [], { maxItems: 2, maxBodyWords: mode === "pdf" ? 28 : 36 }), "compact")}
-      ${section("Critic Sources", sourceListHtml(critic?.sources || [], { maxItems: mode === "pdf" ? 3 : 4, maxQuoteWords: 10, maxUrlLen: 60 }), "compact")}
+      ${section("Critic Sources", sourceChipArrayHtml(critic?.sources || [], { maxItems: mode === "pdf" ? 7 : 10 }), "compact")}
     </article>
   `;
 }
@@ -557,10 +593,10 @@ function reportCss(mode = "html") {
       color: #0f172a;
     }
     .section {
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 8px 10px;
+      padding: 7px 9px;
       background: #ffffff;
     }
     .section-label {
@@ -569,7 +605,7 @@ function reportCss(mode = "html") {
       letter-spacing: 0.06em;
       color: #64748b;
       font-weight: 700;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -579,47 +615,46 @@ function reportCss(mode = "html") {
       line-height: 1;
     }
     .small-text {
-      font-size: 11px;
-      line-height: 1.35;
+      font-size: ${isPdf ? "10px" : "10.5px"};
+      line-height: 1.28;
       color: #334155;
     }
     .pre-wrap {
       white-space: pre-wrap;
     }
-    .source-list {
-      margin: 0;
-      padding-left: 18px;
-      display: grid;
-      gap: 6px;
+    .source-chip-array {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
     }
-    .source-item {
-      font-size: 11px;
-      color: #334155;
-    }
-    .source-name {
-      font-weight: 700;
-      color: #0f172a;
-    }
-    .source-quote {
-      margin-top: 2px;
-      font-style: italic;
-    }
-    .source-url {
-      display: inline-block;
-      margin-top: 1px;
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: #eff6ff;
       color: #2563eb;
       text-decoration: none;
-      word-break: break-all;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.25;
     }
-    .source-url:hover {
+    .source-chip:hover {
       text-decoration: underline;
+    }
+    .source-chip-static {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+      color: #475569;
+      text-decoration: none;
     }
     .thread-list {
       display: grid;
       gap: 6px;
     }
     .thread-item {
-      padding: 8px 9px;
+      padding: 6px 8px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
@@ -633,9 +668,9 @@ function reportCss(mode = "html") {
       margin-bottom: 2px;
     }
     .thread-body {
-      font-size: 11px;
+      font-size: ${isPdf ? "10px" : "10.5px"};
       color: #334155;
-      line-height: 1.3;
+      line-height: 1.22;
       white-space: pre-wrap;
     }
     .portfolio-title {

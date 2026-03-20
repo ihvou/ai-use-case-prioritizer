@@ -1,6 +1,47 @@
 import { useState } from "react";
 import SourcesList from "./SourcesList";
 
+function renderTextWithUrlAnchors(text) {
+  if (!text) return null;
+  const parts = [];
+  const urlRegex = /https?:\/\/[^\s<>"']+/g;
+  let lastIndex = 0;
+  let sourceIdx = 1;
+
+  let match = urlRegex.exec(text);
+  while (match) {
+    const raw = match[0];
+    const start = match.index;
+    if (start > lastIndex) {
+      parts.push(text.slice(lastIndex, start));
+    }
+
+    const cleanUrl = raw.replace(/[),.;!?]+$/g, "");
+    const trailing = raw.slice(cleanUrl.length);
+    parts.push(
+      <a
+        key={`${start}-${sourceIdx}`}
+        href={cleanUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "#60a5fa", textDecoration: "none", fontWeight: 600 }}>
+        Source {sourceIdx}
+      </a>
+    );
+    if (trailing) parts.push(trailing);
+
+    sourceIdx += 1;
+    lastIndex = start + raw.length;
+    match = urlRegex.exec(text);
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
+}
+
 export default function EvidenceBlock({ brief, full, sources, risks }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -16,7 +57,9 @@ export default function EvidenceBlock({ brief, full, sources, risks }) {
           {expanded && (
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #1f2937" }}>
               {full && (
-                <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.75, margin: "0 0 10px" }}>{full}</p>
+                <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.75, margin: "0 0 10px", whiteSpace: "pre-wrap" }}>
+                  {renderTextWithUrlAnchors(full)}
+                </p>
               )}
               <SourcesList sources={sources} />
               {risks && (
