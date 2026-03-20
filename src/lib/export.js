@@ -330,7 +330,6 @@ function renderDimensionPage(uc, d, options = {}) {
   const scoreColor = score != null ? dimScoreColor(Number(score)) : "#64748b";
   const title = uc.attributes?.title || uc.rawInput || "Untitled use case";
   const bigBriefWords = mode === "pdf" ? 22 : 30;
-  const fullWords = mode === "pdf" ? 150 : 190;
   const riskWords = mode === "pdf" ? 45 : 60;
   const criticWords = mode === "pdf" ? 40 : 52;
   const analystWords = mode === "pdf" ? 46 : 60;
@@ -355,7 +354,7 @@ function renderDimensionPage(uc, d, options = {}) {
         <div class="big-score" style="color:${escapeHtml(scoreColor)}">${score == null ? "-" : `${escapeHtml(score)}/5`}</div>
         <div class="big-brief">${escapeHtml(limitWords(view.brief || "No brief summary available.", bigBriefWords))}</div>
       </div>
-      ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(limitWords(fullWithSourceLabels, fullWords))}</div>`)}
+      ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(fullWithSourceLabels)}</div>`)}
       ${section("Risks", `<div class="small-text pre-wrap">${escapeHtml(limitWords(view.risks || "No risk notes provided.", riskWords))}</div>`)}
       ${section("Sources", sourceChipArrayHtml(view.sources, { maxItems: mode === "pdf" ? 9 : 12 }), "compact")}
       ${section("Debate", debateBody, "compact")}
