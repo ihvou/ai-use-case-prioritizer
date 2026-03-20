@@ -3,7 +3,7 @@ import { DEFAULT_DIMS } from "./constants/dimensions";
 import { getEffectiveScore, calcWeightedScore } from "./lib/scoring";
 import { runAnalysis } from "./hooks/useAnalysis";
 import { handleFollowUp } from "./hooks/useFollowUp";
-import { exportSummaryCsv, exportDetailCsv } from "./lib/export";
+import { exportSummaryCsv, exportDetailCsv, exportAnalysisHtml, exportAnalysisPdf } from "./lib/export";
 import Spinner from "./components/Spinner";
 import ScorePill from "./components/ScorePill";
 import TotalPill from "./components/TotalPill";
@@ -126,6 +126,36 @@ export default function App() {
           </span>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button
+            onClick={() => exportAnalysisHtml(useCases, dims)}
+            disabled={!useCases.length}
+            style={{
+              background: "#0f1520",
+              border: "1px solid #2d3748",
+              color: useCases.length ? "#7dd3fc" : "#374151",
+              padding: "6px 12px",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              opacity: useCases.length ? 1 : 0.5,
+            }}>
+            Export HTML Report
+          </button>
+          <button
+            onClick={() => exportAnalysisPdf(useCases, dims)}
+            disabled={!useCases.length}
+            style={{
+              background: "#0f1520",
+              border: "1px solid #2d3748",
+              color: useCases.length ? "#93c5fd" : "#374151",
+              padding: "6px 12px",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              opacity: useCases.length ? 1 : 0.5,
+            }}>
+            Export PDF Report
+          </button>
           <button
             onClick={() => exportSummaryCsv(useCases, dims)}
             disabled={!useCases.length}
