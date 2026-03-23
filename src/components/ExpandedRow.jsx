@@ -4,7 +4,7 @@ import OverviewTab from "./OverviewTab";
 import DimensionsTab from "./DimensionsTab";
 import DebateTab from "./DebateTab";
 import ProgressTab from "./ProgressTab";
-import { exportSingleUseCaseHtml, exportSingleUseCasePdf, exportSingleUseCaseImagesZip } from "../lib/export";
+import { openSingleUseCaseHtml, exportSingleUseCasePdf, exportSingleUseCaseImagesZip } from "../lib/export";
 
 const PHASE_LABELS = {
   analyst: "Analyst researching...",
@@ -15,7 +15,15 @@ const PHASE_LABELS = {
   finalizing: "Analyst responding...",
 };
 
-export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoading, onFollowUp }) {
+export default function ExpandedRow({
+  uc,
+  dims,
+  fuInputs,
+  onFuInputChange,
+  fuLoading,
+  onFollowUp,
+  getPrebuiltHtml,
+}) {
   const [tab, setTab] = useState("progress");
 
   useEffect(() => {
@@ -62,7 +70,8 @@ export default function ExpandedRow({ uc, dims, fuInputs, onFuInputChange, fuLoa
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  exportSingleUseCaseHtml(uc, dims);
+                  const prebuilt = getPrebuiltHtml ? getPrebuiltHtml(uc.id) : "";
+                  openSingleUseCaseHtml(uc, dims, prebuilt);
                 }}
                 style={{
                   background: "var(--ck-surface)",

@@ -4,7 +4,13 @@ import { calcWeightedScore } from "./lib/scoring";
 import { getDimensionView } from "./lib/dimensionView";
 import { runAnalysis } from "./hooks/useAnalysis";
 import { handleFollowUp } from "./hooks/useFollowUp";
-import { exportSummaryCsv, exportDetailCsv, exportAnalysisHtml, exportAnalysisPdf } from "./lib/export";
+import {
+  exportSummaryCsv,
+  exportDetailCsv,
+  exportAnalysisHtml,
+  exportAnalysisPdf,
+  buildSingleUseCaseReportHtml,
+} from "./lib/export";
 import { downloadDebugLogsBundle } from "./lib/debug";
 import Spinner from "./components/Spinner";
 import ScorePill from "./components/ScorePill";
@@ -27,7 +33,40 @@ export default function App() {
 
   const ucRef = useRef(useCases);
   const exportMenuRef = useRef(null);
+  const prebuiltSingleHtmlRef = useRef({});
   useEffect(() => { ucRef.current = useCases; }, [useCases]);
+
+  useEffect(() => {
+    const nextCache = { ...prebuiltSingleHtmlRef.current };
+    const activeIds = new Set();
+
+    useCases.forEach((uc) => {
+      activeIds.add(uc.id);
+      if (uc.status !== "complete") return;
+
+      const signature = JSON.stringify({
+        attributes: uc.attributes,
+        dimScores: uc.dimScores,
+        critique: uc.critique,
+        finalScores: uc.finalScores,
+        followUps: uc.followUps,
+      });
+
+      const cached = nextCache[uc.id];
+      if (cached?.signature === signature) return;
+
+      nextCache[uc.id] = {
+        signature,
+        html: buildSingleUseCaseReportHtml(uc, dims),
+      };
+    });
+
+    Object.keys(nextCache).forEach((id) => {
+      if (!activeIds.has(id)) delete nextCache[id];
+    });
+
+    prebuiltSingleHtmlRef.current = nextCache;
+  }, [useCases, dims]);
 
   function updateUC(id, fn) {
     setUseCases(prev => prev.map(u => u.id === id ? fn(u) : u));
@@ -494,6 +533,7 @@ export default function App() {
                             onFuInputChange={setFuInput}
                             fuLoading={fuLoading}
                             onFollowUp={onFollowUp}
+                            getPrebuiltHtml={(id) => prebuiltSingleHtmlRef.current[id]?.html || ""}
                           />
                         </td>
                       </tr>

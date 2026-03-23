@@ -904,6 +904,19 @@ function buildReportHtml(useCases, dims, options = {}) {
   `;
 }
 
+export function buildSingleUseCaseReportHtml(uc, dims) {
+  return buildReportHtml([uc], dims, { mode: "html", includePortfolio: false });
+}
+
+function openHtmlInNewTab(html) {
+  const tab = window.open("", "_blank");
+  if (!tab) return false;
+  tab.document.open();
+  tab.document.write(html);
+  tab.document.close();
+  return true;
+}
+
 export function exportSummaryCsv(useCases, dims) {
   const headers = [
     "use_case_id",
@@ -1100,9 +1113,21 @@ export function exportAnalysisPdf(useCases, dims) {
 }
 
 export function exportSingleUseCaseHtml(uc, dims) {
-  const html = buildReportHtml([uc], dims, { mode: "html", includePortfolio: false });
+  const html = buildSingleUseCaseReportHtml(uc, dims);
   const tag = safeFilePart(uc?.attributes?.title || uc?.id || "use-case");
-  downloadHtml(`use-case-report-${tag}-${timestampTag()}.html`, html);
+  const opened = openHtmlInNewTab(html);
+  if (!opened) {
+    downloadHtml(`use-case-report-${tag}-${timestampTag()}.html`, html);
+  }
+}
+
+export function openSingleUseCaseHtml(uc, dims, prebuiltHtml = "") {
+  const html = prebuiltHtml || buildSingleUseCaseReportHtml(uc, dims);
+  const opened = openHtmlInNewTab(html);
+  if (!opened) {
+    const tag = safeFilePart(uc?.attributes?.title || uc?.id || "use-case");
+    downloadHtml(`use-case-report-${tag}-${timestampTag()}.html`, html);
+  }
 }
 
 export function exportSingleUseCasePdf(uc, dims) {
