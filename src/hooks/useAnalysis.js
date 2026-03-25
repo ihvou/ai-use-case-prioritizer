@@ -42,11 +42,11 @@ function buildPhase1Prompt(desc, dims, { liveSearch = false, condensed = false }
 
   const dimTemplate = buildDimJsonTemplate(dims, condensed);
   const attributesTemplate = condensed
-    ? `{"title": "<max 8 words>", "problemStatement": "<1 sentence>", "solutionStatement": "<1 sentence>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
+    ? `{"title": "<max 8 words>", "problemStatement": "<adaptive: 1-8 sentences based on input detail>", "solutionStatement": "<adaptive: 1-8 sentences based on input detail>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
     : `{
     "title": "<descriptive title, max 8 words>",
-    "problemStatement": "<1-2 sentences: core business problem, bottleneck, or pain point>",
-    "solutionStatement": "<1-2 sentences: specific AI-enabled solution approach>",
+    "problemStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (business pain, constraints, impact)>",
+    "solutionStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (AI approach, workflow, value path)>",
     "expandedDescription": "<2-3 sentences: what the AI does, how it creates value, why an outsourcer should care>",
     "vertical": "<primary industry vertical>",
     "buyerPersona": "<job title of primary decision maker>",
@@ -65,6 +65,11 @@ CONFIDENCE CALIBRATION (required for every dimension):
 - High: named deployments with verifiable metrics and strong market familiarity.
 - Medium: deployments exist but evidence is sparse, self-reported, or rapidly changing.
 - Low: fewer than two verifiable deployments, underrepresented vertical, or heavy extrapolation.
+
+PROBLEM / SOLUTION DETAIL RULE (required):
+- Keep statements proportional to user input detail.
+- If input is short/high-level, keep each statement concise (1-2 sentences).
+- If input is detailed, summarize with richer detail (6-8 sentences per statement).
 
 Return ONLY this JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
 
@@ -143,11 +148,11 @@ function buildHybridReconcilePrompt(desc, dims, baseline, web, condensed = false
 
   const dimTemplate = buildDimJsonTemplate(dims, condensed);
   const attrsTemplate = condensed
-    ? `{"title": "<max 8 words>", "problemStatement": "<1 sentence>", "solutionStatement": "<1 sentence>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
+    ? `{"title": "<max 8 words>", "problemStatement": "<adaptive: 1-8 sentences based on input detail>", "solutionStatement": "<adaptive: 1-8 sentences based on input detail>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
     : `{
     "title": "<descriptive title, max 8 words>",
-    "problemStatement": "<1-2 sentences: core business problem, bottleneck, or pain point>",
-    "solutionStatement": "<1-2 sentences: specific AI-enabled solution approach>",
+    "problemStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (business pain, constraints, impact)>",
+    "solutionStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (AI approach, workflow, value path)>",
     "expandedDescription": "<2-3 sentences: what the AI does, how it creates value, why an outsourcer should care>",
     "vertical": "<primary industry vertical>",
     "buyerPersona": "<job title of primary decision maker>",
@@ -179,6 +184,9 @@ Rules:
   - High: named deployments with verifiable metrics and strong market familiarity.
   - Medium: deployments exist but evidence is sparse, self-reported, or rapidly changing.
   - Low: fewer than two verifiable deployments, underrepresented vertical, or heavy extrapolation.
+- Keep problemStatement and solutionStatement proportional to user input detail:
+  - Short input: 1-2 sentences each.
+  - Detailed input: 6-8 sentences each.
 
 Return ONLY this JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
 {
