@@ -4,9 +4,23 @@ import ConfidenceBadge from "./ConfidenceBadge";
 import { calcWeightedScore } from "../lib/scoring";
 import { getDimensionView } from "../lib/dimensionView";
 
+function fallbackProblem(uc) {
+  return uc.attributes?.problemStatement
+    || uc.rawInput
+    || "";
+}
+
+function fallbackSolution(uc) {
+  return uc.attributes?.solutionStatement
+    || uc.attributes?.expandedDescription
+    || "";
+}
+
 export default function OverviewTab({ uc, dims }) {
   const a = uc.attributes;
   const score = calcWeightedScore(uc, dims);
+  const problemStatement = fallbackProblem(uc);
+  const solutionStatement = fallbackSolution(uc);
   const lowConfidence = dims
     .map((d) => ({ dim: d, view: getDimensionView(uc, d.id) }))
     .filter((item) => item.view.confidence === "low");
@@ -35,6 +49,30 @@ export default function OverviewTab({ uc, dims }) {
               <p style={{ fontSize: 12, color: "var(--ck-muted)", lineHeight: 1.65, margin: "12px 0 0", borderTop: "1px solid var(--ck-line)", paddingTop: 12 }}>
                 {a.expandedDescription}
               </p>
+            )}
+            {(problemStatement || solutionStatement) && (
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--ck-line)", paddingTop: 12, display: "grid", gap: 8 }}>
+                {problemStatement && (
+                  <div style={{ background: "var(--ck-surface-soft)", border: "1px solid var(--ck-line)", borderRadius: 8, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--ck-blue)", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 3 }}>
+                      Problem Statement
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--ck-text)", lineHeight: 1.55 }}>
+                      {problemStatement}
+                    </div>
+                  </div>
+                )}
+                {solutionStatement && (
+                  <div style={{ background: "var(--ck-surface-soft)", border: "1px solid var(--ck-line)", borderRadius: 8, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--ck-blue)", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 3 }}>
+                      Solution Statement
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--ck-text)", lineHeight: 1.55 }}>
+                      {solutionStatement}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </>
         ) : (

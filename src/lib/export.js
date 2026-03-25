@@ -236,6 +236,18 @@ function confidenceChipHtml(level, reason = "", compact = false) {
   `;
 }
 
+function useCaseProblem(uc) {
+  return uc?.attributes?.problemStatement
+    || uc?.rawInput
+    || "Problem statement not available.";
+}
+
+function useCaseSolution(uc) {
+  return uc?.attributes?.solutionStatement
+    || uc?.attributes?.expandedDescription
+    || "Solution statement not available.";
+}
+
 function sourceChipArrayHtml(sources = [], options = {}) {
   const { maxItems = 12 } = options;
   if (!sources?.length) return "<div class=\"muted\">No sources available.</div>";
@@ -252,15 +264,6 @@ function sourceChipArrayHtml(sources = [], options = {}) {
     ? `<span class="source-chip source-chip-static">+${sources.length - maxItems}</span>`
     : "";
   return `<div class="source-chip-array">${chips}${extra}</div>`;
-}
-
-function citationBadgesHtml(sources = []) {
-  if (!sources?.length) return "<div class=\"citation-line muted\">No citation listed.</div>";
-  const badges = sources.slice(0, 2).map((s) => {
-    const label = escapeHtml(s?.name || "Source");
-    return `<span class="citation-badge">🔗 ${label}</span>`;
-  }).join("");
-  return `<div class="citation-line">${badges}</div>`;
 }
 
 function threadHistoryHtml(thread = [], options = {}) {
@@ -291,10 +294,38 @@ function section(label, body, className = "") {
   `;
 }
 
+function renderUseCaseIntroPage(uc, index) {
+  const title = uc.attributes?.title || uc.rawInput || `Use case ${index + 1}`;
+  const problem = useCaseProblem(uc);
+  const solution = useCaseSolution(uc);
+  const context = uc.attributes?.expandedDescription || uc.rawInput || "";
+
+  return `
+    <article class="page intro-page">
+      <div class="page-topline">🧭 Use Case Brief</div>
+      <h1 class="uc-title">${escapeHtml(title)}</h1>
+      <div class="intro-context">${escapeHtml(context)}</div>
+      <section class="intro-block">
+        <div class="intro-label">Problem Statement</div>
+        <div class="intro-text">${escapeHtml(problem)}</div>
+      </section>
+      <section class="intro-block">
+        <div class="intro-label">Solution Statement</div>
+        <div class="intro-text">${escapeHtml(solution)}</div>
+      </section>
+      <div class="intro-meta-grid">
+        <div><span class="meta-k">Vertical</span><span class="meta-v">${escapeHtml(uc.attributes?.vertical || "-")}</span></div>
+        <div><span class="meta-k">Buyer</span><span class="meta-v">${escapeHtml(uc.attributes?.buyerPersona || "-")}</span></div>
+        <div><span class="meta-k">AI Solution</span><span class="meta-v">${escapeHtml(uc.attributes?.aiSolutionType || "-")}</span></div>
+        <div><span class="meta-k">Timeline</span><span class="meta-v">${escapeHtml(uc.attributes?.typicalTimeline || "-")}</span></div>
+      </div>
+    </article>
+  `;
+}
+
 function renderUseCaseSummaryPage(uc, dims, index, options = {}) {
   const mode = options.mode || "html";
   const summaryCols = mode === "pdf" ? 3 : 4;
-  const briefWordCap = mode === "pdf" ? 10 : 12;
   const summaryWordCap = mode === "pdf" ? 22 : 28;
   const conclusionWordCap = mode === "pdf" ? 26 : 30;
 
@@ -317,8 +348,7 @@ function renderUseCaseSummaryPage(uc, dims, index, options = {}) {
             <span class="dim-weight">${escapeHtml(d.weight)}%</span>
           </span>
         </div>
-        <div class="dim-brief">${escapeHtml(limitWords(view.brief || "No brief available.", briefWordCap))}</div>
-        ${citationBadgesHtml((view.sources || []).slice(0, 1))}
+        <div class="dim-brief">${escapeHtml(view.brief || "No brief available.")}</div>
       </div>
     `;
   }).join("");
@@ -549,6 +579,47 @@ function reportCss(mode = "html") {
       border-bottom: 1px solid #eef2ff;
       padding-bottom: 4px;
     }
+    .intro-context {
+      font-size: ${isPdf ? "14px" : "15px"};
+      color: #1e293b;
+      margin: 10px 0 12px;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .intro-block {
+      border: 1px solid #dbe2f0;
+      background: #f9fbff;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .intro-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #1d4ed8;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+    .intro-text {
+      font-size: ${isPdf ? "12px" : "13px"};
+      line-height: 1.45;
+      color: #0f172a;
+      font-weight: 600;
+      white-space: pre-wrap;
+    }
+    .intro-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px 14px;
+      margin-top: 8px;
+    }
+    .intro-meta-grid > div {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid #eef2ff;
+      padding-bottom: 4px;
+    }
     .meta-k {
       min-width: 92px;
       font-size: 12px;
@@ -654,27 +725,13 @@ function reportCss(mode = "html") {
       text-align: right;
     }
     .dim-brief {
-      font-size: ${isPdf ? "10px" : "11px"};
+      font-size: ${isPdf ? "9.2px" : "9.8px"};
       font-weight: 700;
       color: #1e293b;
-      line-height: 1.2;
-    }
-    .citation-line {
-      margin-top: 5px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
-    .citation-badge {
-      display: inline-block;
-      border: 1px solid #bfdbfe;
-      background: #eff6ff;
-      color: #1d4ed8;
-      font-size: 9px;
-      font-weight: 700;
-      padding: 1px 6px;
-      border-radius: 999px;
-      line-height: 1.3;
+      line-height: 1.16;
+      margin-top: 2px;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .dim-page-head {
       display: flex;
@@ -885,14 +942,15 @@ function buildReportHtml(useCases, dims, options = {}) {
       <h1 class="portfolio-title">AI Use Case Portfolio Summary</h1>
       <div class="small-text">Generated: ${escapeHtml(generated)} | Use cases: ${useCases.length}</div>
       ${buildPortfolioTable(useCases, dims)}
-      ${section("How to read this report", "<div class=\"small-text\">Each use case has one summary page, followed by one page per scoring dimension. Large typography highlights score and brief judgment. Smaller typography contains full reasoning, sources, and debate details.</div>")}
+      ${section("How to read this report", "<div class=\"small-text\">Each use case has one intro page (problem + solution), one summary page, then one page per scoring dimension. Large typography highlights score and brief judgment. Smaller typography contains full reasoning, sources, and debate details.</div>")}
     </article>
   `;
 
   const useCasePages = useCases.map((uc, index) => {
+    const intro = renderUseCaseIntroPage(uc, index);
     const summary = renderUseCaseSummaryPage(uc, dims, index, { mode });
     const dimPages = dims.map((d) => renderDimensionPage(uc, d, { mode })).join("");
-    return `${summary}${dimPages}`;
+    return `${intro}${summary}${dimPages}`;
   }).join("");
 
   return `

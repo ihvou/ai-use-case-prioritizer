@@ -42,9 +42,11 @@ function buildPhase1Prompt(desc, dims, { liveSearch = false, condensed = false }
 
   const dimTemplate = buildDimJsonTemplate(dims, condensed);
   const attributesTemplate = condensed
-    ? `{"title": "<max 8 words>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
+    ? `{"title": "<max 8 words>", "problemStatement": "<1 sentence>", "solutionStatement": "<1 sentence>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
     : `{
     "title": "<descriptive title, max 8 words>",
+    "problemStatement": "<1-2 sentences: core business problem, bottleneck, or pain point>",
+    "solutionStatement": "<1-2 sentences: specific AI-enabled solution approach>",
     "expandedDescription": "<2-3 sentences: what the AI does, how it creates value, why an outsourcer should care>",
     "vertical": "<primary industry vertical>",
     "buyerPersona": "<job title of primary decision maker>",
@@ -141,9 +143,11 @@ function buildHybridReconcilePrompt(desc, dims, baseline, web, condensed = false
 
   const dimTemplate = buildDimJsonTemplate(dims, condensed);
   const attrsTemplate = condensed
-    ? `{"title": "<max 8 words>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
+    ? `{"title": "<max 8 words>", "problemStatement": "<1 sentence>", "solutionStatement": "<1 sentence>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
     : `{
     "title": "<descriptive title, max 8 words>",
+    "problemStatement": "<1-2 sentences: core business problem, bottleneck, or pain point>",
+    "solutionStatement": "<1-2 sentences: specific AI-enabled solution approach>",
     "expandedDescription": "<2-3 sentences: what the AI does, how it creates value, why an outsourcer should care>",
     "vertical": "<primary industry vertical>",
     "buyerPersona": "<job title of primary decision maker>",
