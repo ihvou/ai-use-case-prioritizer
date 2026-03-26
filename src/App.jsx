@@ -5,11 +5,10 @@ import { getDimensionView } from "./lib/dimensionView";
 import { runAnalysis } from "./hooks/useAnalysis";
 import { handleFollowUp } from "./hooks/useFollowUp";
 import {
-  exportSummaryCsv,
-  exportDetailCsv,
   exportAnalysisHtml,
   exportAnalysisPdf,
-  buildSingleUseCaseReportHtml,
+  exportPortfolioJson,
+  importUseCasesFromJsonText,
 } from "./lib/export";
 import { downloadDebugLogsBundle } from "./lib/debug";
 import Spinner from "./components/Spinner";
@@ -30,43 +29,15 @@ export default function App() {
   const [analysisMode, setAnalysisMode] = useState("hybrid");
   const [fuInputs, setFuInputs] = useState({});
   const [fuLoading, setFuLoading] = useState({});
+  const [toolbarExportLoading, setToolbarExportLoading] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importWarning, setImportWarning] = useState("");
+  const [importError, setImportError] = useState("");
 
   const ucRef = useRef(useCases);
   const exportMenuRef = useRef(null);
-  const prebuiltSingleHtmlRef = useRef({});
+  const importFileRef = useRef(null);
   useEffect(() => { ucRef.current = useCases; }, [useCases]);
-
-  useEffect(() => {
-    const nextCache = { ...prebuiltSingleHtmlRef.current };
-    const activeIds = new Set();
-
-    useCases.forEach((uc) => {
-      activeIds.add(uc.id);
-      if (uc.status !== "complete") return;
-
-      const signature = JSON.stringify({
-        attributes: uc.attributes,
-        dimScores: uc.dimScores,
-        critique: uc.critique,
-        finalScores: uc.finalScores,
-        followUps: uc.followUps,
-      });
-
-      const cached = nextCache[uc.id];
-      if (cached?.signature === signature) return;
-
-      nextCache[uc.id] = {
-        signature,
-        html: buildSingleUseCaseReportHtml(uc, dims),
-      };
-    });
-
-    Object.keys(nextCache).forEach((id) => {
-      if (!activeIds.has(id)) delete nextCache[id];
-    });
-
-    prebuiltSingleHtmlRef.current = nextCache;
-  }, [useCases, dims]);
 
   function updateUC(id, fn) {
     setUseCases(prev => prev.map(u => u.id === id ? fn(u) : u));
@@ -170,8 +141,52 @@ export default function App() {
     await runNewAnalysis(desc, inheritedMode, origin);
   }
 
+  async function runToolbarExport(kind, action) {
+    if (toolbarExportLoading) return;
+    setToolbarExportLoading(kind);
+    setImportError("");
+    try {
+      await action();
+    } catch (err) {
+      setImportError(`Export failed: ${err?.message || "Unknown error."}`);
+    } finally {
+      setToolbarExportLoading("");
+      exportMenuRef.current?.removeAttribute("open");
+    }
+  }
+
+  function triggerImportJson() {
+    if (importLoading) return;
+    setImportError("");
+    importFileRef.current?.click();
+  }
+
+  async function onImportJsonChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    setImportError("");
+    setImportWarning("");
+    try {
+      const text = await file.text();
+      const parsed = importUseCasesFromJsonText(text, dims, useCases.map((u) => u.id));
+      if (!parsed.useCases.length) {
+        throw new Error("No completed use cases were found in this file.");
+      }
+      setUseCases((prev) => [...prev, ...parsed.useCases]);
+      setExpandedId(parsed.useCases[parsed.useCases.length - 1].id);
+      setImportWarning(parsed.warning || "");
+    } catch (err) {
+      setImportError(err?.message || "Import failed.");
+    } finally {
+      setImportLoading(false);
+      e.target.value = "";
+    }
+  }
+
   const activeDims = dims.filter(d => d.enabled);
   const totalWeight = dims.reduce((s, d) => s + d.weight, 0);
+  const completedCount = useCases.filter((u) => u.status === "complete").length;
 
   const PHASE_LABEL_SHORT = {
     analyst: "Research...",
@@ -208,7 +223,7 @@ export default function App() {
           <details ref={exportMenuRef} style={{ position: "relative" }}>
             <summary
               onClick={(e) => {
-                if (!useCases.length) e.preventDefault();
+                if (!useCases.length || toolbarExportLoading || importLoading) e.preventDefault();
               }}
               style={{
                 background: "var(--ck-surface)",
@@ -218,12 +233,12 @@ export default function App() {
                 borderRadius: 8,
                 fontSize: 12,
                 fontWeight: 600,
-                opacity: useCases.length ? 1 : 0.5,
+                opacity: useCases.length && !importLoading ? 1 : 0.5,
                 listStyle: "none",
-                cursor: useCases.length ? "pointer" : "not-allowed",
+                cursor: useCases.length && !toolbarExportLoading && !importLoading ? "pointer" : "not-allowed",
                 userSelect: "none",
               }}>
-              Export v
+              {toolbarExportLoading ? "Exporting..." : "Export v"}
             </summary>
             <div style={{
               position: "absolute",
@@ -239,19 +254,25 @@ export default function App() {
               zIndex: 30,
             }}>
               {[
-                { label: "HTML Report", action: () => exportAnalysisHtml(useCases, dims) },
-                { label: "PDF Report", action: () => exportAnalysisPdf(useCases, dims) },
-                { label: "Summary CSV", action: () => exportSummaryCsv(useCases, dims) },
-                { label: "Detail CSV", action: () => exportDetailCsv(useCases, dims) },
-                { label: "Logs JSON", action: () => downloadDebugLogsBundle() },
+                { key: "html", label: "HTML Report", action: () => exportAnalysisHtml(useCases, dims) },
+                { key: "pdf", label: "PDF Report", action: () => exportAnalysisPdf(useCases, dims) },
+                {
+                  key: "portfolio-json",
+                  label: "Portfolio JSON",
+                  action: () => {
+                    if (!completedCount) {
+                      throw new Error("No completed use cases available for portfolio JSON export.");
+                    }
+                    return exportPortfolioJson(useCases, dims);
+                  },
+                },
+                { key: "logs", label: "Logs JSON", action: () => downloadDebugLogsBundle() },
               ].map((item) => (
                 <button
-                  key={item.label}
+                  key={item.key}
                   type="button"
-                  onClick={() => {
-                    item.action();
-                    exportMenuRef.current?.removeAttribute("open");
-                  }}
+                  onClick={() => { void runToolbarExport(item.key, item.action); }}
+                  disabled={!!toolbarExportLoading || importLoading}
                   style={{
                     background: "var(--ck-surface-soft)",
                     border: "1px solid var(--ck-line)",
@@ -260,13 +281,43 @@ export default function App() {
                     borderRadius: 6,
                     fontSize: 12,
                     padding: "6px 8px",
-                    cursor: "pointer",
+                    cursor: toolbarExportLoading || importLoading ? "not-allowed" : "pointer",
+                    opacity: toolbarExportLoading && toolbarExportLoading !== item.key ? 0.55 : 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
                   }}>
-                  {item.label}
+                  {toolbarExportLoading === item.key ? <Spinner size={10} /> : null}
+                  <span>{toolbarExportLoading === item.key ? `${item.label}...` : item.label}</span>
                 </button>
               ))}
             </div>
           </details>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={onImportJsonChange}
+            style={{ display: "none" }}
+          />
+          <button
+            onClick={triggerImportJson}
+            disabled={importLoading}
+            style={{
+              background: "var(--ck-surface)",
+              border: "1px solid var(--ck-line)",
+              color: "var(--ck-blue)",
+              padding: "6px 14px",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              opacity: importLoading ? 0.6 : 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}>
+            {importLoading ? <><Spinner size={10} color="var(--ck-blue)" /> Importing...</> : "Import JSON"}
+          </button>
           <button
             onClick={() => setShowDimsPanel(v => !v)}
             style={{
@@ -380,6 +431,16 @@ export default function App() {
 
       {/* MAIN TABLE */}
       <div style={{ padding: 20 }}>
+        {importError && (
+          <div style={{ marginBottom: 10, background: "#fff0ee", border: "1px solid #f2c7be", borderRadius: 8, padding: "9px 12px", color: "#b42318", fontSize: 12 }}>
+            {importError}
+          </div>
+        )}
+        {importWarning && (
+          <div style={{ marginBottom: 10, background: "#fff8e8", border: "1px solid #f8dc9b", borderRadius: 8, padding: "9px 12px", color: "#935f00", fontSize: 12 }}>
+            {importWarning}
+          </div>
+        )}
         {useCases.length === 0 ? (
           <div style={{ textAlign: "left", padding: "40px 20px", maxWidth: 760, margin: "0 auto", background: "var(--ck-surface)", borderRadius: 14, border: "1px solid var(--ck-line)" }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: "var(--ck-text)", marginBottom: 8, fontFamily: "Aileron, Inter, sans-serif" }}>
@@ -567,7 +628,6 @@ export default function App() {
                             onFollowUp={onFollowUp}
                             onAnalyzeRelated={(candidate) => onAnalyzeRelated(uc, candidate)}
                             globalAnalyzing={globalAnalyzing}
-                            getPrebuiltHtml={(id) => prebuiltSingleHtmlRef.current[id]?.html || ""}
                           />
                         </td>
                       </tr>

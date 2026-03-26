@@ -5,7 +5,12 @@ import DimensionsTab from "./DimensionsTab";
 import DebateTab from "./DebateTab";
 import DiscoverTab from "./DiscoverTab";
 import ProgressTab from "./ProgressTab";
-import { openSingleUseCaseHtml, exportSingleUseCasePdf, exportSingleUseCaseImagesZip } from "../lib/export";
+import {
+  openSingleUseCaseHtml,
+  exportSingleUseCasePdf,
+  exportSingleUseCaseImagesZip,
+  exportSingleUseCaseJson,
+} from "../lib/export";
 
 const PHASE_LABELS = {
   analyst: "Analyst researching...",
@@ -24,11 +29,11 @@ export default function ExpandedRow({
   onFuInputChange,
   fuLoading,
   onFollowUp,
-  getPrebuiltHtml,
   onAnalyzeRelated,
   globalAnalyzing = false,
 }) {
   const [tab, setTab] = useState("progress");
+  const [exportLoading, setExportLoading] = useState("");
 
   useEffect(() => {
     setTab("progress");
@@ -39,6 +44,27 @@ export default function ExpandedRow({
       setTab("overview");
     }
   }, [uc.status]);
+
+  useEffect(() => {
+    setExportLoading("");
+  }, [uc.id]);
+
+  async function runExport(kind, action, e) {
+    e.stopPropagation();
+    if (exportLoading) return;
+    setExportLoading(kind);
+    try {
+      const ok = await action();
+      if (ok === false) {
+        window.alert("Export did not complete. Please try again.");
+      }
+    } catch (err) {
+      console.error("Export failed:", err);
+      window.alert(`Export failed: ${err?.message || "Unknown error."}`);
+    } finally {
+      setExportLoading("");
+    }
+  }
 
   return (
     <div style={{ borderTop: "2px solid var(--ck-line-strong)", maxWidth: "100%", overflowX: "hidden" }}>
@@ -69,15 +95,12 @@ export default function ExpandedRow({
                 <Spinner size={10} /> {PHASE_LABELS[uc.phase] || "Processing..."}
               </span>
             : null}
-          {uc.status !== "analyzing" && (
+          {uc.status === "complete" && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const prebuilt = getPrebuiltHtml ? getPrebuiltHtml(uc.id) : "";
-                  openSingleUseCaseHtml(uc, dims, prebuilt);
-                }}
+                onClick={(e) => { void runExport("html", () => openSingleUseCaseHtml(uc, dims), e); }}
+                disabled={!!exportLoading}
                 style={{
                   background: "var(--ck-surface)",
                   border: "1px solid var(--ck-line)",
@@ -85,16 +108,19 @@ export default function ExpandedRow({
                   borderRadius: 6,
                   fontSize: 11,
                   padding: "4px 8px",
-                  cursor: "pointer",
+                  cursor: exportLoading ? "not-allowed" : "pointer",
+                  opacity: exportLoading && exportLoading !== "html" ? 0.55 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
                 }}>
-                Export HTML
+                {exportLoading === "html" ? <Spinner size={9} color="var(--ck-blue)" /> : null}
+                {exportLoading === "html" ? "Export HTML..." : "Export HTML"}
               </button>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  exportSingleUseCasePdf(uc, dims);
-                }}
+                onClick={(e) => { void runExport("pdf", () => exportSingleUseCasePdf(uc, dims), e); }}
+                disabled={!!exportLoading}
                 style={{
                   background: "var(--ck-surface)",
                   border: "1px solid var(--ck-line)",
@@ -102,16 +128,19 @@ export default function ExpandedRow({
                   borderRadius: 6,
                   fontSize: 11,
                   padding: "4px 8px",
-                  cursor: "pointer",
+                  cursor: exportLoading ? "not-allowed" : "pointer",
+                  opacity: exportLoading && exportLoading !== "pdf" ? 0.55 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
                 }}>
-                Export PDF
+                {exportLoading === "pdf" ? <Spinner size={9} color="var(--ck-blue)" /> : null}
+                {exportLoading === "pdf" ? "Export PDF..." : "Export PDF"}
               </button>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void exportSingleUseCaseImagesZip(uc, dims);
-                }}
+                onClick={(e) => { void runExport("images", () => exportSingleUseCaseImagesZip(uc, dims), e); }}
+                disabled={!!exportLoading}
                 style={{
                   background: "var(--ck-surface)",
                   border: "1px solid var(--ck-line)",
@@ -119,9 +148,34 @@ export default function ExpandedRow({
                   borderRadius: 6,
                   fontSize: 11,
                   padding: "4px 8px",
-                  cursor: "pointer",
+                  cursor: exportLoading ? "not-allowed" : "pointer",
+                  opacity: exportLoading && exportLoading !== "images" ? 0.55 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
                 }}>
-                Export Images ZIP
+                {exportLoading === "images" ? <Spinner size={9} color="var(--ck-blue)" /> : null}
+                {exportLoading === "images" ? "Export Images..." : "Export Images ZIP"}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { void runExport("json", () => exportSingleUseCaseJson(uc, dims), e); }}
+                disabled={!!exportLoading}
+                style={{
+                  background: "var(--ck-surface)",
+                  border: "1px solid var(--ck-line)",
+                  color: "var(--ck-blue)",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "4px 8px",
+                  cursor: exportLoading ? "not-allowed" : "pointer",
+                  opacity: exportLoading && exportLoading !== "json" ? 0.55 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                }}>
+                {exportLoading === "json" ? <Spinner size={9} color="var(--ck-blue)" /> : null}
+                {exportLoading === "json" ? "Export JSON..." : "Export JSON"}
               </button>
             </div>
           )}

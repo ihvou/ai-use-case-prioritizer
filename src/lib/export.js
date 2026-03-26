@@ -3,6 +3,9 @@ import { getDimensionView, formatSourcesForCell } from "./dimensionView";
 import JSZip from "jszip";
 import { toPng } from "html-to-image";
 
+const EXPORT_SCHEMA_VERSION = 1;
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.0";
+
 function csvEscape(value) {
   if (value == null) return "";
   const str = String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -89,6 +92,14 @@ function timestampTag() {
   return `${y}${m}${d}-${h}${min}`;
 }
 
+function dateTag() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function getScoreColumns(dims) {
   const cols = [];
   dims.forEach((d) => {
@@ -159,6 +170,54 @@ function safeFilePart(value, fallback = "use-case") {
   const raw = String(value || fallback).trim().toLowerCase();
   const cleaned = raw.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return cleaned || fallback;
+}
+
+function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function dimensionConfigSnapshot(dims = []) {
+  return (dims || []).map((d) => ({
+    id: d.id,
+    label: d.label,
+    weight: d.weight,
+    enabled: !!d.enabled,
+  }));
+}
+
+function isCompletedUseCase(uc) {
+  return uc?.status === "complete" && isPlainObject(uc);
+}
+
+function validateUseCaseShape(uc) {
+  if (!isPlainObject(uc)) throw new Error("Use case entry is not an object.");
+  if (typeof uc.id !== "string" || !uc.id.trim()) throw new Error("Use case is missing a valid id.");
+  if (typeof uc.rawInput !== "string") throw new Error(`Use case ${uc.id} is missing rawInput.`);
+  if (uc.status !== "complete") throw new Error(`Use case ${uc.id} is not completed.`);
+  if (!isPlainObject(uc.dimScores)) throw new Error(`Use case ${uc.id} is missing dimScores.`);
+  if (!isPlainObject(uc.finalScores)) throw new Error(`Use case ${uc.id} is missing finalScores.`);
+  if (!Array.isArray(uc.debate)) throw new Error(`Use case ${uc.id} has invalid debate history.`);
+  if (uc.followUps != null && !isPlainObject(uc.followUps)) {
+    throw new Error(`Use case ${uc.id} has invalid follow-up threads.`);
+  }
+}
+
+function compareDimensionConfigs(importedConfig = [], currentDims = []) {
+  const current = dimensionConfigSnapshot(currentDims);
+  if (!Array.isArray(importedConfig) || importedConfig.length !== current.length) return false;
+  for (let i = 0; i < importedConfig.length; i += 1) {
+    const a = importedConfig[i];
+    const b = current[i];
+    if (!a || !b) return false;
+    if (a.id !== b.id) return false;
+    if (Number(a.weight) !== Number(b.weight)) return false;
+    if (!!a.enabled !== !!b.enabled) return false;
+  }
+  return true;
 }
 
 function scoreTier(score) {
@@ -249,9 +308,10 @@ function useCaseSolution(uc) {
 }
 
 function sourceChipArrayHtml(sources = [], options = {}) {
-  const { maxItems = 12 } = options;
+  const { maxItems = Number.POSITIVE_INFINITY } = options;
   if (!sources?.length) return "<div class=\"muted\">No sources available.</div>";
-  const chips = sources.slice(0, maxItems).map((s, idx) => {
+  const visible = Number.isFinite(maxItems) ? sources.slice(0, maxItems) : sources;
+  const chips = visible.map((s, idx) => {
     const label = sourceLabel(idx + 1);
     const note = [s?.name, s?.quote ? limitWords(s.quote, 14) : ""].filter(Boolean).join(" - ");
     const title = note ? ` title="${escapeHtml(note)}"` : "";
@@ -260,28 +320,50 @@ function sourceChipArrayHtml(sources = [], options = {}) {
     }
     return `<span class="source-chip source-chip-static"${title}>${escapeHtml(label)}</span>`;
   }).join("");
-  const extra = sources.length > maxItems
+  const extra = Number.isFinite(maxItems) && sources.length > maxItems
     ? `<span class="source-chip source-chip-static">+${sources.length - maxItems}</span>`
     : "";
   return `<div class="source-chip-array">${chips}${extra}</div>`;
 }
 
 function threadHistoryHtml(thread = [], options = {}) {
-  const { maxItems = 3, maxBodyWords = 40 } = options;
+  const { maxItems = Number.POSITIVE_INFINITY, maxBodyWords = 0 } = options;
   if (!thread?.length) return "<div class=\"muted\">No follow-up thread.</div>";
-  const items = thread.slice(-maxItems).map((m) => {
+  const visible = Number.isFinite(maxItems) ? thread.slice(-maxItems) : thread;
+  const items = visible.map((m) => {
     const role = m?.role === "pm" ? "PM challenge" : "Analyst follow-up";
     const body = m?.role === "pm"
       ? (m?.text || "")
       : (m?.response || m?.text || "");
+    const displayBody = maxBodyWords > 0 ? limitWords(body, maxBodyWords) : body;
     return `
       <div class="thread-item">
         <div class="thread-role">${escapeHtml(role)}</div>
-        <div class="thread-body">${escapeHtml(limitWords(body, maxBodyWords))}</div>
+        <div class="thread-body">${escapeHtml(displayBody)}</div>
       </div>
     `;
   }).join("");
   return `<div class="thread-list">${items}</div>`;
+}
+
+function discoverCandidatesHtml(uc, dims = [], options = {}) {
+  const { maxItems = 5 } = options;
+  const candidates = uc?.discover?.candidates || [];
+  if (!candidates.length) return "<div class=\"muted\">No discovery candidates available.</div>";
+  const labelById = new Map((dims || []).map((d) => [d.id, d.label]));
+  const items = candidates.slice(0, maxItems).map((c) => {
+    const improved = (c?.expectedImprovedDimensions || [])
+      .map((id) => labelById.get(id) || id)
+      .join(", ");
+    return `
+      <div class="discover-item">
+        <div class="discover-title">${escapeHtml(c?.title || "Untitled candidate")}</div>
+        <div class="discover-rationale">${escapeHtml(c?.rationale || "")}</div>
+        ${improved ? `<div class="discover-improves">Expected lift: ${escapeHtml(improved)}</div>` : ""}
+      </div>
+    `;
+  }).join("");
+  return `<div class="discover-list">${items}</div>`;
 }
 
 function section(label, body, className = "") {
@@ -294,7 +376,7 @@ function section(label, body, className = "") {
   `;
 }
 
-function renderUseCaseIntroPage(uc, index) {
+function renderUseCaseIntroPage(uc, dims, index) {
   const title = uc.attributes?.title || uc.rawInput || `Use case ${index + 1}`;
   const problem = useCaseProblem(uc);
   const solution = useCaseSolution(uc);
@@ -313,6 +395,7 @@ function renderUseCaseIntroPage(uc, index) {
         <div class="intro-label">Solution Statement</div>
         <div class="intro-text">${escapeHtml(solution)}</div>
       </section>
+      ${section("Discovery Candidates", discoverCandidatesHtml(uc, dims, { maxItems: 5 }), "compact")}
       <div class="intro-meta-grid">
         <div><span class="meta-k">Vertical</span><span class="meta-v">${escapeHtml(uc.attributes?.vertical || "-")}</span></div>
         <div><span class="meta-k">Buyer</span><span class="meta-v">${escapeHtml(uc.attributes?.buyerPersona || "-")}</span></div>
@@ -326,8 +409,6 @@ function renderUseCaseIntroPage(uc, index) {
 function renderUseCaseSummaryPage(uc, dims, index, options = {}) {
   const mode = options.mode || "html";
   const summaryCols = mode === "pdf" ? 3 : 4;
-  const summaryWordCap = mode === "pdf" ? 22 : 28;
-  const conclusionWordCap = mode === "pdf" ? 26 : 30;
 
   const title = uc.attributes?.title || uc.rawInput || `Use case ${index + 1}`;
   const weighted = calcWeightedScore(uc, dims);
@@ -394,33 +475,33 @@ function renderUseCaseSummaryPage(uc, dims, index, options = {}) {
         <div class="score-value" style="color:${escapeHtml(scoreColor)}">${weighted == null ? "-" : `${escapeHtml(weighted)}%`}</div>
         <div class="score-tier">${priorityIcon(weighted)} ${escapeHtml(tier)}</div>
       </div>
-      <div class="summary-desc">${escapeHtml(limitWords(uc.attributes?.expandedDescription || uc.rawInput || "", summaryWordCap))}</div>
+      <div class="summary-desc">${escapeHtml(uc.attributes?.expandedDescription || uc.rawInput || "")}</div>
       ${summaryMeta}
       ${lowConfidenceBanner}
-      ${section("Strategic Conclusion", `<div class="small-text">${escapeHtml(limitWords(uc.finalScores?.conclusion || "No conclusion available yet.", conclusionWordCap))}</div>`)}
+      ${section("Strategic Conclusion", `<div class="small-text">${escapeHtml(uc.finalScores?.conclusion || "No conclusion available yet.")}</div>`)}
       <div class="dim-grid">${dimCards}</div>
     </article>
   `;
 }
 
 function renderDimensionPage(uc, d, options = {}) {
-  const mode = options.mode || "html";
   const view = getDimensionView(uc, d.id);
   const critic = uc.critique?.dimensions?.[d.id];
   const score = view.effectiveScore;
   const scoreColor = score != null ? dimScoreColor(Number(score)) : "#64748b";
   const title = uc.attributes?.title || uc.rawInput || "Untitled use case";
-  const riskWords = mode === "pdf" ? 45 : 60;
-  const criticWords = mode === "pdf" ? 40 : 52;
-  const analystWords = mode === "pdf" ? 46 : 60;
   const fullWithSourceLabels = replaceUrlsWithSourceLabels(
     view.full || "No full analysis available.",
     view.sources || []
   );
+  const normalizedConfidence = normalizeConfidence(view.confidence);
+  const confidenceReasonLine = normalizedConfidence
+    ? `${confidenceLabel(normalizedConfidence)}: ${view.confidenceReason || "Reason not provided."}`
+    : "Confidence unavailable.";
 
   const debateBody = `
-    <div class="small-text"><strong>Critic:</strong> ${escapeHtml(limitWords(critic?.critique || "No critic comment.", criticWords))}</div>
-    <div class="small-text"><strong>Analyst response:</strong> ${escapeHtml(limitWords(view.debate?.response || "No debate response.", analystWords))}</div>
+    <div class="small-text"><strong>Critic:</strong> ${escapeHtml(critic?.critique || "No critic comment.")}</div>
+    <div class="small-text"><strong>Analyst response:</strong> ${escapeHtml(view.debate?.response || "No debate response.")}</div>
   `;
 
   return `
@@ -437,12 +518,13 @@ function renderDimensionPage(uc, d, options = {}) {
         <div class="big-score" style="color:${escapeHtml(scoreColor)}">${score == null ? "-" : `${escapeHtml(score)}/5`}</div>
         <div class="big-brief">${escapeHtml(view.brief || "No brief summary available.")}</div>
       </div>
+      <div class="confidence-detail">${escapeHtml(confidenceReasonLine)}</div>
       ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(fullWithSourceLabels)}</div>`)}
-      ${section("Risks", `<div class="small-text pre-wrap">${escapeHtml(limitWords(view.risks || "No risk notes provided.", riskWords))}</div>`)}
-      ${section("Sources", sourceChipArrayHtml(view.sources, { maxItems: mode === "pdf" ? 9 : 12 }), "compact")}
+      ${section("Risks", `<div class="small-text pre-wrap">${escapeHtml(view.risks || "No risk notes provided.")}</div>`)}
+      ${section("Sources", sourceChipArrayHtml(view.sources), "compact")}
       ${section("Debate", debateBody, "compact")}
-      ${section("Follow-up Thread", threadHistoryHtml(uc.followUps?.[d.id] || [], { maxItems: 2, maxBodyWords: mode === "pdf" ? 28 : 36 }), "compact")}
-      ${section("Critic Sources", sourceChipArrayHtml(critic?.sources || [], { maxItems: mode === "pdf" ? 7 : 10 }), "compact")}
+      ${section("Follow-up Thread", threadHistoryHtml(uc.followUps?.[d.id] || []), "compact")}
+      ${section("Critic Sources", sourceChipArrayHtml(critic?.sources || []), "compact")}
     </article>
   `;
 }
@@ -518,8 +600,7 @@ function reportCss(mode = "html") {
       page-break-after: always;
       break-after: page;
       min-height: ${isPdf ? "1040px" : "740px"};
-      max-height: ${isPdf ? "1040px" : "740px"};
-      overflow: hidden;
+      overflow: visible;
     }
     .page:last-child {
       page-break-after: auto;
@@ -780,6 +861,13 @@ function reportCss(mode = "html") {
       font-weight: 800;
       color: #0f172a;
     }
+    .confidence-detail {
+      margin: -2px 0 8px;
+      font-size: ${isPdf ? "10px" : "10.5px"};
+      color: #334155;
+      line-height: 1.28;
+      font-weight: 700;
+    }
     .section {
       margin-bottom: 6px;
       border: 1px solid #e2e8f0;
@@ -861,6 +949,34 @@ function reportCss(mode = "html") {
       line-height: 1.22;
       white-space: pre-wrap;
     }
+    .discover-list {
+      display: grid;
+      gap: 6px;
+    }
+    .discover-item {
+      border: 1px solid #dbe2f0;
+      background: #f9fbff;
+      border-radius: 8px;
+      padding: 6px 8px;
+    }
+    .discover-title {
+      font-size: ${isPdf ? "10.5px" : "11px"};
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 2px;
+    }
+    .discover-rationale {
+      font-size: ${isPdf ? "9.4px" : "9.8px"};
+      color: #334155;
+      line-height: 1.25;
+    }
+    .discover-improves {
+      margin-top: 3px;
+      font-size: ${isPdf ? "9px" : "9.4px"};
+      color: #1d4ed8;
+      line-height: 1.2;
+      font-weight: 700;
+    }
     .portfolio-title {
       margin: 0 0 10px;
       font-size: 34px;
@@ -904,8 +1020,7 @@ function reportCss(mode = "html") {
         margin: 0;
         padding: 0;
         min-height: calc(297mm - 16mm);
-        max-height: calc(297mm - 16mm);
-        overflow: hidden;
+        overflow: visible;
       }
     }
     @media (max-width: 840px) {
@@ -947,7 +1062,7 @@ function buildReportHtml(useCases, dims, options = {}) {
   `;
 
   const useCasePages = useCases.map((uc, index) => {
-    const intro = renderUseCaseIntroPage(uc, index);
+    const intro = renderUseCaseIntroPage(uc, dims, index);
     const summary = renderUseCaseSummaryPage(uc, dims, index, { mode });
     const dimPages = dims.map((d) => renderDimensionPage(uc, d, { mode })).join("");
     return `${intro}${summary}${dimPages}`;
@@ -983,6 +1098,121 @@ function openHtmlInNewTab(html) {
   tab.document.write(html);
   tab.document.close();
   return true;
+}
+
+function buildSingleUseCaseJsonPayload(uc, dims) {
+  if (!isCompletedUseCase(uc)) {
+    throw new Error("Only completed use cases can be exported as JSON.");
+  }
+  validateUseCaseShape(uc);
+  return {
+    format: "uc-single",
+    schemaVersion: EXPORT_SCHEMA_VERSION,
+    appVersion: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    dimensionConfig: dimensionConfigSnapshot(dims),
+    useCase: deepClone(uc),
+  };
+}
+
+function buildPortfolioJsonPayload(useCases, dims) {
+  const completed = (useCases || []).filter(isCompletedUseCase);
+  completed.forEach(validateUseCaseShape);
+  return {
+    format: "uc-portfolio",
+    schemaVersion: EXPORT_SCHEMA_VERSION,
+    appVersion: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    dimensionConfig: dimensionConfigSnapshot(dims),
+    useCases: deepClone(completed),
+  };
+}
+
+function downloadJson(filename, payload) {
+  const text = JSON.stringify(payload, null, 2);
+  const blob = new Blob([text], { type: "application/json;charset=utf-8;" });
+  downloadBlob(filename, blob);
+}
+
+function parseEnvelope(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_) {
+    throw new Error("File is not valid JSON.");
+  }
+  if (!isPlainObject(parsed)) throw new Error("Top-level JSON must be an object.");
+  if (typeof parsed.format !== "string") throw new Error("Missing export format marker.");
+  if (!Number.isFinite(Number(parsed.schemaVersion))) throw new Error("Missing or invalid schemaVersion.");
+  const schemaVersion = Number(parsed.schemaVersion);
+  if (schemaVersion > EXPORT_SCHEMA_VERSION) {
+    throw new Error(`File was produced by a newer schema version (${schemaVersion}).`);
+  }
+  if (typeof parsed.appVersion === "string" && parsed.appVersion.trim()) {
+    const fileMajor = Number(String(parsed.appVersion).split(".")[0]) || 0;
+    const currentMajor = Number(String(APP_VERSION).split(".")[0]) || 0;
+    if (fileMajor > currentMajor && currentMajor > 0) {
+      throw new Error(`File was produced by a newer app version (${parsed.appVersion}).`);
+    }
+  }
+  if (parsed.format !== "uc-single" && parsed.format !== "uc-portfolio") {
+    throw new Error(`Unsupported export format: ${parsed.format}`);
+  }
+  return parsed;
+}
+
+function extractImportedUseCases(envelope) {
+  if (envelope.format === "uc-single") {
+    if (!isPlainObject(envelope.useCase)) throw new Error("Single-use-case file is missing useCase payload.");
+    validateUseCaseShape(envelope.useCase);
+    return [deepClone(envelope.useCase)];
+  }
+  if (!Array.isArray(envelope.useCases)) throw new Error("Portfolio file is missing useCases array.");
+  envelope.useCases.forEach(validateUseCaseShape);
+  return deepClone(envelope.useCases);
+}
+
+export function importUseCasesFromJsonText(text, currentDims, existingIds = []) {
+  const envelope = parseEnvelope(text);
+  const importedUseCases = extractImportedUseCases(envelope);
+
+  const seen = new Set(existingIds || []);
+  for (const uc of importedUseCases) {
+    if (seen.has(uc.id)) {
+      throw new Error(`Duplicate use case id detected: ${uc.id}`);
+    }
+    seen.add(uc.id);
+  }
+
+  const configCompatible = compareDimensionConfigs(envelope.dimensionConfig || [], currentDims);
+  const warning = configCompatible
+    ? ""
+    : "Imported scores were calculated with different dimension weights - weighted totals have been recalculated using your current settings.";
+
+  return {
+    useCases: importedUseCases,
+    warning,
+    envelopeMeta: {
+      format: envelope.format,
+      appVersion: envelope.appVersion || "",
+      schemaVersion: Number(envelope.schemaVersion),
+      exportedAt: envelope.exportedAt || "",
+    },
+  };
+}
+
+export function exportSingleUseCaseJson(uc, dims) {
+  const payload = buildSingleUseCaseJsonPayload(uc, dims);
+  const slug = safeFilePart(uc?.attributes?.title || uc?.rawInput || uc?.id || "use-case");
+  downloadJson(`${slug}-${dateTag()}.json`, payload);
+  return payload;
+}
+
+export function exportPortfolioJson(useCases, dims) {
+  const payload = buildPortfolioJsonPayload(useCases, dims);
+  const count = payload.useCases.length;
+  downloadJson(`uc-portfolio-${dateTag()}-${count}-cases.json`, payload);
+  return payload;
 }
 
 export function exportSummaryCsv(useCases, dims) {
@@ -1117,90 +1347,99 @@ export function exportDetailCsv(useCases, dims) {
 }
 
 function printHtmlFromHiddenFrame(html) {
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("aria-hidden", "true");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.style.opacity = "0";
+  return new Promise((resolve) => {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
 
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-  };
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    };
 
-  iframe.onload = () => {
-    const win = iframe.contentWindow;
-    if (!win) {
+    iframe.onload = () => {
+      const win = iframe.contentWindow;
+      if (!win) {
+        cleanup();
+        resolve(false);
+        return;
+      }
+
+      const afterPrint = () => {
+        win.removeEventListener("afterprint", afterPrint);
+        cleanup();
+      };
+      win.addEventListener("afterprint", afterPrint);
+
+      setTimeout(() => {
+        try {
+          win.focus();
+          win.print();
+          resolve(true);
+        } catch (_) {
+          resolve(false);
+        } finally {
+          setTimeout(cleanup, 25000);
+        }
+      }, 250);
+    };
+
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
       cleanup();
+      window.alert("Could not initialize PDF print frame.");
+      resolve(false);
       return;
     }
+    doc.open();
+    doc.write(html);
+    doc.close();
+  });
+}
 
-    const afterPrint = () => {
-      win.removeEventListener("afterprint", afterPrint);
-      cleanup();
-    };
-    win.addEventListener("afterprint", afterPrint);
-
-    setTimeout(() => {
-      try {
-        win.focus();
-        win.print();
-      } finally {
-        setTimeout(cleanup, 25000);
-      }
-    }, 250);
-  };
-
-  document.body.appendChild(iframe);
-  const doc = iframe.contentDocument || iframe.contentWindow?.document;
-  if (!doc) {
-    cleanup();
-    window.alert("Could not initialize PDF print frame.");
-    return false;
-  }
-  doc.open();
-  doc.write(html);
-  doc.close();
+export async function exportAnalysisHtml(useCases, dims) {
+  const html = buildReportHtml(useCases, dims, { mode: "html", includePortfolio: true });
+  downloadHtml(`use-case-analysis-${timestampTag()}.html`, html);
   return true;
 }
 
-export function exportAnalysisHtml(useCases, dims) {
-  const html = buildReportHtml(useCases, dims, { mode: "html", includePortfolio: true });
-  downloadHtml(`use-case-analysis-${timestampTag()}.html`, html);
-}
-
-export function exportAnalysisPdf(useCases, dims) {
+export async function exportAnalysisPdf(useCases, dims) {
   const html = buildReportHtml(useCases, dims, { mode: "pdf", includePortfolio: true });
-  printHtmlFromHiddenFrame(html);
+  return printHtmlFromHiddenFrame(html);
 }
 
-export function exportSingleUseCaseHtml(uc, dims) {
+export async function exportSingleUseCaseHtml(uc, dims) {
   const html = buildSingleUseCaseReportHtml(uc, dims);
   const tag = safeFilePart(uc?.attributes?.title || uc?.id || "use-case");
   const opened = openHtmlInNewTab(html);
   if (!opened) {
     downloadHtml(`use-case-report-${tag}-${timestampTag()}.html`, html);
   }
+  return true;
 }
 
-export function openSingleUseCaseHtml(uc, dims, prebuiltHtml = "") {
-  const html = prebuiltHtml || buildSingleUseCaseReportHtml(uc, dims);
+export async function openSingleUseCaseHtml(uc, dims) {
+  const html = buildSingleUseCaseReportHtml(uc, dims);
   const opened = openHtmlInNewTab(html);
   if (!opened) {
     const tag = safeFilePart(uc?.attributes?.title || uc?.id || "use-case");
     downloadHtml(`use-case-report-${tag}-${timestampTag()}.html`, html);
   }
+  return true;
 }
 
-export function exportSingleUseCasePdf(uc, dims) {
+export async function exportSingleUseCasePdf(uc, dims) {
   const html = buildReportHtml([uc], dims, { mode: "pdf", includePortfolio: false });
-  printHtmlFromHiddenFrame(html);
+  return printHtmlFromHiddenFrame(html);
 }
 
 export async function exportSingleUseCaseImagesZip(uc, dims) {
