@@ -3,8 +3,17 @@ import SourcesList from "./SourcesList";
 import FollowUpThread from "./FollowUpThread";
 import ConfidenceBadge from "./ConfidenceBadge";
 import { getDimensionView } from "../lib/dimensionView";
+import { getLatestAcceptedFollowUpAdjustment } from "../lib/scoring";
 
-export default function DebateTab({ uc, dims, fuInputs, onFuInputChange, fuLoading, onFollowUp }) {
+export default function DebateTab({
+  uc,
+  dims,
+  fuInputs,
+  onFuInputChange,
+  fuLoading,
+  onFollowUp,
+  onResolveFollowUpProposal,
+}) {
   const phaseInitial = uc.debate?.find(d => d.phase === "initial");
   const phaseCritique = uc.debate?.find(d => d.phase === "critique");
   const phaseResponse = uc.debate?.find(d => d.phase === "response");
@@ -50,8 +59,8 @@ export default function DebateTab({ uc, dims, fuInputs, onFuInputChange, fuLoadi
           const crit = phaseCritique?.content?.dimensions?.[d.id];
           const fin = phaseResponse?.content?.dimensions?.[d.id];
           const thread = uc.followUps?.[d.id] || [];
-          const fuAdjusted = thread.filter(m => m.role === "analyst" && m.scoreAdjusted && m.newScore != null);
-          const pmAdjustedScore = fuAdjusted.length ? fuAdjusted[fuAdjusted.length - 1].newScore : null;
+          const accepted = getLatestAcceptedFollowUpAdjustment(thread);
+          const pmAdjustedScore = accepted?.score ?? null;
           const fuKey = `${uc.id}::${d.id}`;
 
           if (!initScore) return null;
@@ -103,6 +112,7 @@ export default function DebateTab({ uc, dims, fuInputs, onFuInputChange, fuLoadi
                   inputVal={fuInputs[fuKey] || ""}
                   onInputChange={val => onFuInputChange(fuKey, val)}
                   onSubmit={() => onFollowUp(uc.id, d.id, fuInputs[fuKey] || "")}
+                  onResolveProposal={(messageId, decision) => onResolveFollowUpProposal?.(uc.id, d.id, messageId, decision)}
                   loading={!!fuLoading[fuKey]}
                 />
               </div>

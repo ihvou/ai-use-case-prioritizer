@@ -29,6 +29,7 @@ export default function ExpandedRow({
   onFuInputChange,
   fuLoading,
   onFollowUp,
+  onResolveFollowUpProposal,
   onAnalyzeRelated,
   globalAnalyzing = false,
 }) {
@@ -234,6 +235,7 @@ export default function ExpandedRow({
             uc={uc} dims={dims}
             fuInputs={fuInputs} onFuInputChange={onFuInputChange}
             fuLoading={fuLoading} onFollowUp={onFollowUp}
+            onResolveFollowUpProposal={onResolveFollowUpProposal}
           />
         )}
         {tab === "discover" && (

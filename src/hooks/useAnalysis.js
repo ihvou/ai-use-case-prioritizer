@@ -32,18 +32,32 @@ function buildDimJsonTemplate(dims, condensed = false) {
   ).join(",\n    ");
 }
 
-function buildPhase1Prompt(desc, dims, { liveSearch = false, condensed = false } = {}) {
-  const liveSearchBlock = liveSearch
-    ? `\nLIVE SEARCH MODE:
-- Use web search to verify high-confidence claims.
-- Prefer current sources (last 24 months) where possible.
-- Include real URLs for each dimension when available.\n`
-    : "";
+function buildDimEvidenceJsonTemplate(dims, condensed = false) {
+  if (condensed) {
+    return dims.map((d) =>
+      `"${d.id}": {"evidence": [{"point": "<max 16 words>", "relevance": "<max 10 words>", "source": {"name": "...", "quote": "<max 12 words>", "url": "..."}}], "missingEvidence": "<max 20 words>"}`
+    ).join(",\n    ");
+  }
 
-  const dimTemplate = buildDimJsonTemplate(dims, condensed);
-  const attributesTemplate = condensed
-    ? `{"title": "<max 8 words>", "problemStatement": "<adaptive: 1-8 sentences based on input detail>", "solutionStatement": "<adaptive: 1-8 sentences based on input detail>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
-    : `{
+  return dims.map((d) =>
+    `"${d.id}": {
+      "evidence": [
+        {
+          "point": "<discrete verifiable fact or market signal>",
+          "relevance": "<why this matters for this dimension>",
+          "source": {"name": "<source name>", "quote": "<paraphrased insight, max 15 words>", "url": "<real URL if known>"}
+        }
+      ],
+      "missingEvidence": "<what key evidence is still missing for strong confidence>"
+    }`
+  ).join(",\n    ");
+}
+
+function buildAttributesTemplate(condensed = false) {
+  if (condensed) {
+    return `{"title": "<max 8 words>", "problemStatement": "<adaptive: 1-8 sentences based on input detail>", "solutionStatement": "<adaptive: 1-8 sentences based on input detail>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`;
+  }
+  return `{
     "title": "<descriptive title, max 8 words>",
     "problemStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (business pain, constraints, impact)>",
     "solutionStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (AI approach, workflow, value path)>",
@@ -54,27 +68,77 @@ function buildPhase1Prompt(desc, dims, { liveSearch = false, condensed = false }
     "typicalTimeline": "<realistic end-to-end delivery estimate>",
     "deliveryModel": "<how outsourcer engages: build-and-transfer, managed service, etc>"
   }`;
+}
 
-  return `Analyze this AI use case for an outsourcing company that builds CUSTOM AI solutions for enterprise clients:
+function buildPhase1EvidencePrompt(desc, dims, { liveSearch = false, condensed = false } = {}) {
+  const liveSearchBlock = liveSearch
+    ? `\nLIVE SEARCH MODE:
+- Use web search to verify high-confidence claims.
+- Prefer current sources (last 24 months) where possible.
+- Include real URLs for each dimension when available.\n`
+    : "";
+
+  const evidenceTemplate = buildDimEvidenceJsonTemplate(dims, condensed);
+  const attributesTemplate = buildAttributesTemplate(condensed);
+
+  return `Step 1 of 2 - EVIDENCE ENUMERATION ONLY.
+Analyze this AI use case for an outsourcing company that builds CUSTOM AI solutions for enterprise clients:
 
 "${desc}"
 
-SCORING DIMENSIONS - use the rubric below to score each one 1-5:
+SCORING DIMENSIONS (for relevance only in this step - DO NOT SCORE YET):
 ${buildDimRubrics(dims)}${liveSearchBlock}
-CONFIDENCE CALIBRATION (required for every dimension):
-- High: named deployments with verifiable metrics and strong market familiarity.
-- Medium: deployments exist but evidence is sparse, self-reported, or rapidly changing.
-- Low: fewer than two verifiable deployments, underrepresented vertical, or heavy extrapolation.
-
-PROBLEM / SOLUTION DETAIL RULE (required):
+PROBLEM / SOLUTION DETAIL RULE:
 - Keep statements proportional to user input detail.
 - If input is short/high-level, keep each statement concise (1-2 sentences).
 - If input is detailed, summarize with richer detail (6-8 sentences per statement).
+
+Rules for this step:
+- Enumerate evidence only: verifiable facts, deployments, metrics, market signals, and caveats.
+- Do NOT assign scores, confidence levels, or narrative conclusions.
+- Keep evidence discrete (bullet-like facts), not long prose.
 
 Return ONLY this JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
 
 {
   "attributes": ${attributesTemplate},
+  "dimensions": {
+    ${evidenceTemplate}
+  }
+}`;
+}
+
+function buildPhase1ScoringPrompt(desc, dims, evidencePayload, { condensed = false, passLabel = "initial analyst pass" } = {}) {
+  const dimTemplate = buildDimJsonTemplate(dims, condensed);
+  const attrsTemplate = buildAttributesTemplate(condensed);
+
+  return `Step 2 of 2 - RUBRIC SCORING FROM ENUMERATED EVIDENCE.
+Use case:
+"${desc}"
+
+Pass context:
+${passLabel}
+
+Enumerated evidence from Step 1:
+${JSON.stringify(evidencePayload || {}, null, 2)}
+
+Rubric:
+${buildDimRubrics(dims)}
+
+Confidence calibration (required for every dimension):
+- High: named deployments with verifiable metrics and strong market familiarity.
+- Medium: deployments exist but evidence is sparse, self-reported, or rapidly changing.
+- Low: fewer than two verifiable deployments, underrepresented vertical, or heavy extrapolation.
+
+Hard rules:
+- Derive scores mechanically from the enumerated evidence above.
+- Do NOT add new facts, deployments, or claims not present in Step 1 evidence.
+- If evidence is weak or mixed, score conservatively and explain limits.
+- Keep attributes consistent with Step 1 unless a clear correction is needed.
+
+Return ONLY this JSON:
+{
+  "attributes": ${attrsTemplate},
   "dimensions": {
     ${dimTemplate}
   }
@@ -125,7 +189,7 @@ function sourceSummary(sources = []) {
     .join("; ");
 }
 
-function buildHybridReconcilePrompt(desc, dims, baseline, web, condensed = false) {
+function buildHybridReconcileEvidencePrompt(desc, dims, baseline, web, condensed = false) {
   const comparison = dims.map((d) => {
     const b = baseline?.dimensions?.[d.id] || {};
     const w = web?.dimensions?.[d.id] || {};
@@ -146,22 +210,11 @@ function buildHybridReconcilePrompt(desc, dims, baseline, web, condensed = false
     ].join("\n");
   }).join("\n\n");
 
-  const dimTemplate = buildDimJsonTemplate(dims, condensed);
-  const attrsTemplate = condensed
-    ? `{"title": "<max 8 words>", "problemStatement": "<adaptive: 1-8 sentences based on input detail>", "solutionStatement": "<adaptive: 1-8 sentences based on input detail>", "expandedDescription": "<2 sentences>", "vertical": "<industry>", "buyerPersona": "<role>", "aiSolutionType": "<AI/ML type>", "typicalTimeline": "<estimate>", "deliveryModel": "<engagement type>"}`
-    : `{
-    "title": "<descriptive title, max 8 words>",
-    "problemStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (business pain, constraints, impact)>",
-    "solutionStatement": "<adaptive detail: short input => 1-2 sentences; detailed input => 6-8 sentences (AI approach, workflow, value path)>",
-    "expandedDescription": "<2-3 sentences: what the AI does, how it creates value, why an outsourcer should care>",
-    "vertical": "<primary industry vertical>",
-    "buyerPersona": "<job title of primary decision maker>",
-    "aiSolutionType": "<specific AI/ML technology type>",
-    "typicalTimeline": "<realistic end-to-end delivery estimate>",
-    "deliveryModel": "<how outsourcer engages: build-and-transfer, managed service, etc>"
-  }`;
+  const evidenceTemplate = buildDimEvidenceJsonTemplate(dims, condensed);
+  const attrsTemplate = buildAttributesTemplate(condensed);
 
-  return `You are a reliability reviewer combining two analyst drafts for the same use case.
+  return `Step 1 of 2 - EVIDENCE ENUMERATION ONLY (HYBRID RECONCILE).
+You are a reliability reviewer combining two analyst drafts for the same use case.
 Use case: "${desc}"
 
 DRAFT A (BASELINE): no live web search.
@@ -178,21 +231,14 @@ ${comparison}
 Rules:
 - Prefer points backed by strong, verifiable evidence.
 - Do not overreact to weak web snippets.
-- If changing a baseline score by 2+ points, ensure the full reasoning clearly justifies the change.
-- Keep the same outsourcing-delivery framing.
-- Output confidence and confidenceReason for every dimension using the same high/medium/low calibration:
-  - High: named deployments with verifiable metrics and strong market familiarity.
-  - Medium: deployments exist but evidence is sparse, self-reported, or rapidly changing.
-  - Low: fewer than two verifiable deployments, underrepresented vertical, or heavy extrapolation.
-- Keep problemStatement and solutionStatement proportional to user input detail:
-  - Short input: 1-2 sentences each.
-  - Detailed input: 6-8 sentences each.
+- Enumerate evidence only. Do NOT output scores or confidence in this step.
+- Keep the same outsourcing-delivery framing and coherent attributes.
 
-Return ONLY this JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
+Return ONLY this JSON:
 {
   "attributes": ${attrsTemplate},
   "dimensions": {
-    ${dimTemplate}
+    ${evidenceTemplate}
   }
 }`;
 }
@@ -511,6 +557,61 @@ function ensureDimensionConfidence(payload, dims) {
   return out;
 }
 
+function sanitizeEvidenceItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const point = String(item.point || "").trim();
+  if (!point) return null;
+  const source = item.source && typeof item.source === "object"
+    ? {
+        name: String(item.source.name || "").trim(),
+        quote: String(item.source.quote || "").trim(),
+        url: String(item.source.url || "").trim(),
+      }
+    : null;
+  return {
+    point,
+    relevance: String(item.relevance || "").trim(),
+    source,
+  };
+}
+
+function ensureEvidencePayload(payload, dims) {
+  const out = payload && typeof payload === "object" ? { ...payload } : {};
+  out.attributes = out.attributes && typeof out.attributes === "object" ? out.attributes : {};
+  out.dimensions = out.dimensions && typeof out.dimensions === "object" ? { ...out.dimensions } : {};
+
+  dims.forEach((d) => {
+    const raw = out.dimensions?.[d.id];
+    const evidence = Array.isArray(raw?.evidence)
+      ? raw.evidence.map(sanitizeEvidenceItem).filter(Boolean).slice(0, 14)
+      : [];
+    out.dimensions[d.id] = {
+      evidence,
+      missingEvidence: String(raw?.missingEvidence || "").trim(),
+    };
+  });
+
+  return out;
+}
+
+function attachEnumeratedEvidence(scoredPayload, evidencePayload, dims) {
+  const out = ensureDimensionConfidence(scoredPayload, dims);
+  out.attributes = {
+    ...(evidencePayload?.attributes || {}),
+    ...(out.attributes && typeof out.attributes === "object" ? out.attributes : {}),
+  };
+  out.dimensions = out.dimensions && typeof out.dimensions === "object" ? { ...out.dimensions } : {};
+
+  dims.forEach((d) => {
+    out.dimensions[d.id] = out.dimensions[d.id] || {};
+    const ev = evidencePayload?.dimensions?.[d.id] || {};
+    out.dimensions[d.id].evidenceEnumerated = Array.isArray(ev.evidence) ? ev.evidence : [];
+    out.dimensions[d.id].missingEvidence = String(ev.missingEvidence || "");
+  });
+
+  return out;
+}
+
 function absorbAnalystMeta(analysisMeta, meta) {
   if (!meta) return;
   if (meta.liveSearchUsed) analysisMeta.liveSearchUsed = true;
@@ -538,20 +639,32 @@ function absorbDiscoveryMeta(analysisMeta, meta) {
   }
 }
 
-async function runAnalystPass(promptBuilder, dims, analysisMeta, debugContext, debugSession, { liveSearch = false, maxTokens = 12000 }) {
+async function runAnalystPass({
+  evidencePromptBuilder,
+  scoringPromptBuilder,
+  dims,
+  analysisMeta,
+  debugContext,
+  debugSession,
+  liveSearch = false,
+  evidenceMaxTokens = 9000,
+  scoringMaxTokens = 12000,
+  passLabel = "analyst",
+}) {
+  let evidencePayload;
   try {
-    const fullPrompt = promptBuilder(false);
+    const fullPrompt = evidencePromptBuilder(false);
     const fullRes = await callAnalystAPI(
       [{ role: "user", content: fullPrompt }],
       SYS_ANALYST,
-      maxTokens,
+      evidenceMaxTokens,
       { liveSearch, includeMeta: true }
     );
     absorbAnalystMeta(analysisMeta, fullRes.meta);
     appendAnalysisDebugEvent(debugSession, {
       type: "model_response",
-      phase: "analyst",
-      attempt: "full",
+      phase: "analyst_evidence",
+      attempt: `${passLabel}_full`,
       liveSearch,
       responseLength: fullRes.text?.length || 0,
       meta: fullRes.meta || null,
@@ -559,9 +672,9 @@ async function runAnalystPass(promptBuilder, dims, analysisMeta, debugContext, d
       responseExcerpt: shortText(fullRes.text, 6000),
       response: shortText(fullRes.text, 100000),
     });
-    return ensureDimensionConfidence(parseWithDiagnostics(fullRes.text, {
-      phase: "analyst",
-      attempt: "full",
+    evidencePayload = ensureEvidencePayload(parseWithDiagnostics(fullRes.text, {
+      phase: "analyst_evidence",
+      attempt: `${passLabel}_full`,
       useCaseId: debugContext.useCaseId,
       analysisMode: debugContext.analysisMode,
       prompt: fullPrompt,
@@ -569,12 +682,12 @@ async function runAnalystPass(promptBuilder, dims, analysisMeta, debugContext, d
   } catch (parseErr) {
     appendAnalysisDebugEvent(debugSession, {
       type: "phase_retry_triggered",
-      phase: "analyst",
-      attempt: "full",
+      phase: "analyst_evidence",
+      attempt: `${passLabel}_full`,
       error: parseErr.message || String(parseErr),
     });
-    console.warn("Analyst parse failed, retrying with condensed prompt:", parseErr.message);
-    const condensedPrompt = promptBuilder(true);
+    console.warn("Analyst evidence parse failed, retrying with condensed prompt:", parseErr.message);
+    const condensedPrompt = evidencePromptBuilder(true);
     const condensedRes = await callAnalystAPI(
       [{ role: "user", content: condensedPrompt }],
       SYS_ANALYST,
@@ -584,8 +697,8 @@ async function runAnalystPass(promptBuilder, dims, analysisMeta, debugContext, d
     absorbAnalystMeta(analysisMeta, condensedRes.meta);
     appendAnalysisDebugEvent(debugSession, {
       type: "model_response",
-      phase: "analyst",
-      attempt: "condensed_retry",
+      phase: "analyst_evidence",
+      attempt: `${passLabel}_condensed_retry`,
       liveSearch,
       responseLength: condensedRes.text?.length || 0,
       meta: condensedRes.meta || null,
@@ -593,47 +706,157 @@ async function runAnalystPass(promptBuilder, dims, analysisMeta, debugContext, d
       responseExcerpt: shortText(condensedRes.text, 6000),
       response: shortText(condensedRes.text, 100000),
     });
-    return ensureDimensionConfidence(parseWithDiagnostics(condensedRes.text, {
-      phase: "analyst",
-      attempt: "condensed_retry",
+    evidencePayload = ensureEvidencePayload(parseWithDiagnostics(condensedRes.text, {
+      phase: "analyst_evidence",
+      attempt: `${passLabel}_condensed_retry`,
       useCaseId: debugContext.useCaseId,
       analysisMode: debugContext.analysisMode,
       prompt: condensedPrompt,
     }, debugSession), dims);
+  }
+
+  appendAnalysisDebugEvent(debugSession, {
+    type: "phase_complete",
+    phase: "analyst_evidence",
+    attempt: passLabel,
+    responseLength: JSON.stringify(evidencePayload || {}).length,
+  });
+
+  try {
+    const fullPrompt = scoringPromptBuilder(evidencePayload, false);
+    const fullRes = await callAnalystAPI(
+      [{ role: "user", content: fullPrompt }],
+      SYS_ANALYST,
+      scoringMaxTokens,
+      { liveSearch: false, includeMeta: true }
+    );
+    absorbAnalystMeta(analysisMeta, fullRes.meta);
+    appendAnalysisDebugEvent(debugSession, {
+      type: "model_response",
+      phase: "analyst_scoring",
+      attempt: `${passLabel}_full`,
+      liveSearch: false,
+      responseLength: fullRes.text?.length || 0,
+      meta: fullRes.meta || null,
+      prompt: shortText(fullPrompt, 30000),
+      responseExcerpt: shortText(fullRes.text, 6000),
+      response: shortText(fullRes.text, 100000),
+    });
+
+    const scored = parseWithDiagnostics(fullRes.text, {
+      phase: "analyst_scoring",
+      attempt: `${passLabel}_full`,
+      useCaseId: debugContext.useCaseId,
+      analysisMode: debugContext.analysisMode,
+      prompt: fullPrompt,
+    }, debugSession);
+
+    const merged = attachEnumeratedEvidence(scored, evidencePayload, dims);
+    appendAnalysisDebugEvent(debugSession, {
+      type: "phase_complete",
+      phase: "analyst_scoring",
+      attempt: passLabel,
+      responseLength: JSON.stringify(merged || {}).length,
+    });
+    return merged;
+  } catch (parseErr) {
+    appendAnalysisDebugEvent(debugSession, {
+      type: "phase_retry_triggered",
+      phase: "analyst_scoring",
+      attempt: `${passLabel}_full`,
+      error: parseErr.message || String(parseErr),
+    });
+    console.warn("Analyst scoring parse failed, retrying with condensed prompt:", parseErr.message);
+
+    const condensedPrompt = scoringPromptBuilder(evidencePayload, true);
+    const condensedRes = await callAnalystAPI(
+      [{ role: "user", content: condensedPrompt }],
+      SYS_ANALYST,
+      8000,
+      { liveSearch: false, includeMeta: true }
+    );
+    absorbAnalystMeta(analysisMeta, condensedRes.meta);
+    appendAnalysisDebugEvent(debugSession, {
+      type: "model_response",
+      phase: "analyst_scoring",
+      attempt: `${passLabel}_condensed_retry`,
+      liveSearch: false,
+      responseLength: condensedRes.text?.length || 0,
+      meta: condensedRes.meta || null,
+      prompt: shortText(condensedPrompt, 30000),
+      responseExcerpt: shortText(condensedRes.text, 6000),
+      response: shortText(condensedRes.text, 100000),
+    });
+    const scored = parseWithDiagnostics(condensedRes.text, {
+      phase: "analyst_scoring",
+      attempt: `${passLabel}_condensed_retry`,
+      useCaseId: debugContext.useCaseId,
+      analysisMode: debugContext.analysisMode,
+      prompt: condensedPrompt,
+    }, debugSession);
+    const merged = attachEnumeratedEvidence(scored, evidencePayload, dims);
+    appendAnalysisDebugEvent(debugSession, {
+      type: "phase_complete",
+      phase: "analyst_scoring",
+      attempt: `${passLabel}_condensed_retry`,
+      responseLength: JSON.stringify(merged || {}).length,
+    });
+    return merged;
   }
 }
 
 async function runHybridPhase1(desc, dims, updateUC, id, analysisMeta, debugSession) {
   const debugContext = { useCaseId: id, analysisMode: analysisMeta.analysisMode };
   updateUC(id, (u) => ({ ...u, phase: "analyst_baseline" }));
-  const baseline = await runAnalystPass(
-    (condensed) => buildPhase1Prompt(desc, dims, { liveSearch: false, condensed }),
+  const baseline = await runAnalystPass({
+    evidencePromptBuilder: (condensed) => buildPhase1EvidencePrompt(desc, dims, { liveSearch: false, condensed }),
+    scoringPromptBuilder: (evidence, condensed) => buildPhase1ScoringPrompt(desc, dims, evidence, {
+      condensed,
+      passLabel: "baseline analyst pass (memory-only)",
+    }),
     dims,
     analysisMeta,
     debugContext,
     debugSession,
-    { liveSearch: false, maxTokens: 12000 }
-  );
+    liveSearch: false,
+    evidenceMaxTokens: 10000,
+    scoringMaxTokens: 12000,
+    passLabel: "analyst_baseline",
+  });
 
   updateUC(id, (u) => ({ ...u, phase: "analyst_web" }));
-  const web = await runAnalystPass(
-    (condensed) => buildPhase1Prompt(desc, dims, { liveSearch: true, condensed }),
+  const web = await runAnalystPass({
+    evidencePromptBuilder: (condensed) => buildPhase1EvidencePrompt(desc, dims, { liveSearch: true, condensed }),
+    scoringPromptBuilder: (evidence, condensed) => buildPhase1ScoringPrompt(desc, dims, evidence, {
+      condensed,
+      passLabel: "web-assisted analyst pass",
+    }),
     dims,
     analysisMeta,
     debugContext,
     debugSession,
-    { liveSearch: true, maxTokens: 12000 }
-  );
+    liveSearch: true,
+    evidenceMaxTokens: 10000,
+    scoringMaxTokens: 12000,
+    passLabel: "analyst_web",
+  });
 
   updateUC(id, (u) => ({ ...u, phase: "analyst_reconcile" }));
-  const reconciled = await runAnalystPass(
-    (condensed) => buildHybridReconcilePrompt(desc, dims, baseline, web, condensed),
+  const reconciled = await runAnalystPass({
+    evidencePromptBuilder: (condensed) => buildHybridReconcileEvidencePrompt(desc, dims, baseline, web, condensed),
+    scoringPromptBuilder: (evidence, condensed) => buildPhase1ScoringPrompt(desc, dims, evidence, {
+      condensed,
+      passLabel: "hybrid reliability reconcile (score from merged evidence)",
+    }),
     dims,
     analysisMeta,
     debugContext,
     debugSession,
-    { liveSearch: false, maxTokens: 12000 }
-  );
+    liveSearch: false,
+    evidenceMaxTokens: 9000,
+    scoringMaxTokens: 12000,
+    passLabel: "analyst_reconcile",
+  });
 
   analysisMeta.hybridStats = computeHybridDeltaStats(dims, baseline, web, reconciled);
   return reconciled;
@@ -686,14 +909,21 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
 
     const p1 = analysisMode === "hybrid"
       ? await runHybridPhase1(desc, dims, updateUC, id, analysisMeta, debugSession)
-      : await runAnalystPass(
-        (condensed) => buildPhase1Prompt(desc, dims, { liveSearch, condensed }),
+      : await runAnalystPass({
+        evidencePromptBuilder: (condensed) => buildPhase1EvidencePrompt(desc, dims, { liveSearch, condensed }),
+        scoringPromptBuilder: (evidence, condensed) => buildPhase1ScoringPrompt(desc, dims, evidence, {
+          condensed,
+          passLabel: liveSearch ? "live-search analyst pass" : "standard analyst pass",
+        }),
         dims,
         analysisMeta,
-        { useCaseId: id, analysisMode },
+        debugContext: { useCaseId: id, analysisMode },
         debugSession,
-        { liveSearch, maxTokens: 12000 }
-      );
+        liveSearch,
+        evidenceMaxTokens: 10000,
+        scoringMaxTokens: 12000,
+        passLabel: "analyst",
+      });
 
     appendAnalysisDebugEvent(debugSession, {
       type: "phase_complete",

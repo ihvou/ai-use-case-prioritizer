@@ -331,11 +331,18 @@ function threadHistoryHtml(thread = [], options = {}) {
   if (!thread?.length) return "<div class=\"muted\">No follow-up thread.</div>";
   const visible = Number.isFinite(maxItems) ? thread.slice(-maxItems) : thread;
   const items = visible.map((m) => {
-    const role = m?.role === "pm" ? "PM challenge" : "Analyst follow-up";
+    const pmLabel = m?.intent
+      ? `PM ${String(m.intent).replace(/_/g, " ")}`
+      : "PM challenge";
+    const role = m?.role === "pm" ? pmLabel : "Analyst follow-up";
     const body = m?.role === "pm"
       ? (m?.text || "")
       : (m?.response || m?.text || "");
-    const displayBody = maxBodyWords > 0 ? limitWords(body, maxBodyWords) : body;
+    const proposal = m?.role === "analyst" && m?.scoreProposal?.newScore != null
+      ? ` [Score proposal ${m.scoreProposal.previousScore}/5 -> ${m.scoreProposal.newScore}/5 (${m.scoreProposal.status || "pending"})]`
+      : "";
+    const fullBody = `${body}${proposal}`.trim();
+    const displayBody = maxBodyWords > 0 ? limitWords(fullBody, maxBodyWords) : fullBody;
     return `
       <div class="thread-item">
         <div class="thread-role">${escapeHtml(role)}</div>

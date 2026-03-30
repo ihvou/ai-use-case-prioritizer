@@ -103,14 +103,6 @@ export default function App() {
     setFuLoading(prev => ({ ...prev, [fuKey]: true }));
     setFuInput(fuKey, "");
 
-    updateUC(ucId, u => ({
-      ...u,
-      followUps: {
-        ...u.followUps,
-        [dimId]: [...(u.followUps?.[dimId] || []), { role: "pm", text: challenge }],
-      },
-    }));
-
     try {
       await handleFollowUp(ucId, dimId, challenge, dims, ucRef, updateUC);
     } catch (err) {
@@ -119,13 +111,38 @@ export default function App() {
         followUps: {
           ...u.followUps,
           [dimId]: [...(u.followUps?.[dimId] || []), {
+            id: `fu-analyst-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             role: "analyst", response: `Error: ${err.message}`,
             sources: [], scoreAdjusted: false, newScore: null,
+            scoreProposal: null,
           }],
         },
       }));
     }
     setFuLoading(prev => ({ ...prev, [fuKey]: false }));
+  }
+
+  function onResolveFollowUpProposal(ucId, dimId, messageId, decision) {
+    updateUC(ucId, (u) => ({
+      ...u,
+      followUps: {
+        ...u.followUps,
+        [dimId]: (u.followUps?.[dimId] || []).map((msg) => {
+          if (msg?.id !== messageId || msg?.role !== "analyst" || !msg?.scoreProposal) return msg;
+          const status = decision === "accept" ? "accepted" : "dismissed";
+          return {
+            ...msg,
+            scoreProposal: {
+              ...msg.scoreProposal,
+              status,
+              resolvedAt: new Date().toISOString(),
+            },
+            scoreAdjusted: status === "accepted",
+            newScore: status === "accepted" ? msg.scoreProposal.newScore : null,
+          };
+        }),
+      },
+    }));
   }
 
   async function onAnalyzeRelated(parentUc, candidate) {
@@ -479,7 +496,7 @@ export default function App() {
               </div>
               <div style={{ fontSize: 12, color: "#17583f", lineHeight: 1.55 }}>
                 In <strong>Debate & Challenges</strong>, send follow-up facts, questions, or objections for any dimension.
-                The Analyst LLM replies in-thread, can revise the score, and keeps the updated reasoning and sources visible.
+                The Analyst LLM replies in-thread, can propose score updates, and you explicitly accept or dismiss each proposal.
               </div>
             </div>
             <div style={{ marginTop: 14, fontSize: 13, color: "var(--ck-muted)" }}>
@@ -626,6 +643,7 @@ export default function App() {
                             onFuInputChange={setFuInput}
                             fuLoading={fuLoading}
                             onFollowUp={onFollowUp}
+                            onResolveFollowUpProposal={onResolveFollowUpProposal}
                             onAnalyzeRelated={(candidate) => onAnalyzeRelated(uc, candidate)}
                             globalAnalyzing={globalAnalyzing}
                           />

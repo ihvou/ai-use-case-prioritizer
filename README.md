@@ -6,14 +6,17 @@ It converts broad ideas into evidence-backed scores, debate outcomes, and next b
 ## Core Workflow
 
 1. **Input**: PM enters a broad use case prompt.
-2. **Phase 1 - Analyst**: scores all 11 dimensions with evidence, risks, sources, and per-dimension confidence (`high`/`medium`/`low`).
+2. **Phase 1 - Analyst (2-step)**:
+   - **Step 1 - Evidence enumeration**: collects structured per-dimension facts, deployments, metrics, and source-backed signals (no scoring in this step).
+   - **Step 2 - Rubric scoring from enumerated evidence**: applies the rubric to the enumerated evidence and produces scores, confidence, rationale, risks, and sources.
 3. **Phase 2 - Critic**: pressure-tests Analyst claims and scores.
 4. **Phase 3 - Analyst Response**: updates reasoning and final per-dimension scores after critique.
 5. **Phase 4 - Discover**: generates 3-5 related candidates targeted at weak dimensions.
 
 After completion, PM can:
 - review Overview / Dimensions / Debate & Challenges / Discover / Progress tabs,
-- challenge any dimension in-thread,
+- use follow-up in-thread with intent-aware handling (challenge, question, reframe, add evidence, note/comment, re-search),
+- review and explicitly **accept** or **dismiss** any proposed score change (no silent score mutation),
 - run full analysis for a discovered candidate via **Analyse ->**,
 - export portfolio or single-use-case reports.
 
@@ -51,19 +54,22 @@ Each dimension includes:
 Global **Export** menu:
 - `HTML Report`
 - `PDF Report`
-- `Summary CSV`
-- `Detail CSV`
+- `Portfolio JSON`
 - `Logs JSON`
 
+Global toolbar:
+- `Import JSON` (single use case or portfolio envelope)
+
 Single-use-case panel:
-- `Export HTML` (pre-generated after completion, opens in a new tab)
+- `Export HTML` (generated on demand, opens in a new tab)
 - `Export PDF`
 - `Export Images ZIP`
+- `Export JSON`
 
 ## Tech Stack
 
 - Frontend: React + Vite
-- API routes: Vercel serverless functions (`api/analyst.js`, `api/critic.js`)
+- API routes: Vercel serverless functions (`api/analyst.js`, `api/critic.js`, `api/fetch-source.js`)
 - Models:
   - Analyst: OpenAI `gpt-5.4-mini`
   - Critic: OpenAI `gpt-5.4`
@@ -77,6 +83,7 @@ ai-use-case-prioritizer/
   api/
     analyst.js
     critic.js
+    fetch-source.js
   src/
     App.jsx
     components/
@@ -98,6 +105,7 @@ ai-use-case-prioritizer/
       debug.js
       dimensionView.js
       export.js
+      followUpIntent.js
       json.js
       rubric.js
       scoring.js

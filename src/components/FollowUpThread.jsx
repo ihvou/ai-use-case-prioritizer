@@ -1,8 +1,26 @@
 import { useState } from "react";
 import Spinner from "./Spinner";
 import SourcesList from "./SourcesList";
+import { intentDisplayLabel, pmIntentLabel } from "../lib/followUpIntent";
 
-export default function FollowUpThread({ thread, inputVal, onInputChange, onSubmit, loading }) {
+function proposalTone(status) {
+  if (status === "accepted") {
+    return { bg: "#ebf8f0", border: "#b8e8d0", text: "#17583f", label: "Accepted" };
+  }
+  if (status === "dismissed") {
+    return { bg: "#fff8e8", border: "#f8dc9b", text: "#935f00", label: "Dismissed" };
+  }
+  return { bg: "#edf2ff", border: "#c9d4ff", text: "var(--ck-blue-ink)", label: "Pending PM decision" };
+}
+
+export default function FollowUpThread({
+  thread,
+  inputVal,
+  onInputChange,
+  onSubmit,
+  onResolveProposal,
+  loading,
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const hasMessages = thread?.length > 0;
   return (
@@ -27,15 +45,67 @@ export default function FollowUpThread({ thread, inputVal, onInputChange, onSubm
                     borderRadius: 8, padding: "8px 12px",
                   }}>
                     <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 4, color: isPM ? "var(--ck-blue)" : "#0f7a55" }}>
-                      {isPM ? "Your Challenge" : "Analyst Response"}
-                      {!isPM && msg.scoreAdjusted && msg.newScore != null &&
-                        <span style={{ color: "#935f00", marginLeft: 8, fontWeight: 400 }}>
-                          - Score revised to {msg.newScore}/5
-                        </span>}
+                      {isPM ? pmIntentLabel(msg.intent) : `Analyst - ${intentDisplayLabel(msg.intent)}`}
+                      {!isPM && msg.scoreAdjusted && msg.newScore != null && (
+                        <span style={{ color: "#935f00", marginLeft: 8, fontWeight: 700 }}>
+                          - Score now {msg.newScore}/5
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize: 12, color: isPM ? "var(--ck-blue-ink)" : "#17583f", margin: "0 0 4px", lineHeight: 1.65 }}>
                       {msg.text || msg.response}
                     </p>
+                    {!isPM && msg.scoreProposal?.newScore != null && (
+                      <div style={{
+                        margin: "6px 0 6px",
+                        border: `1px solid ${proposalTone(msg.scoreProposal.status).border}`,
+                        background: proposalTone(msg.scoreProposal.status).bg,
+                        borderRadius: 8,
+                        padding: "7px 9px",
+                      }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: proposalTone(msg.scoreProposal.status).text, marginBottom: 3 }}>
+                          Score proposal - {proposalTone(msg.scoreProposal.status).label}
+                        </div>
+                        <div style={{ fontSize: 12, color: proposalTone(msg.scoreProposal.status).text, marginBottom: msg.scoreProposal.status === "pending" ? 6 : 0 }}>
+                          {msg.scoreProposal.previousScore}/5 {"->"} {msg.scoreProposal.newScore}/5
+                          {msg.scoreProposal.reason ? ` | ${msg.scoreProposal.reason}` : ""}
+                        </div>
+                        {msg.scoreProposal.status === "pending" && (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => onResolveProposal?.(msg.id, "accept")}
+                              style={{
+                                border: "1px solid #8fd4b3",
+                                background: "#e2f5ea",
+                                color: "#0f7a55",
+                                borderRadius: 6,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: "4px 8px",
+                                cursor: "pointer",
+                              }}>
+                              Accept score update
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onResolveProposal?.(msg.id, "dismiss")}
+                              style={{
+                                border: "1px solid #f8dc9b",
+                                background: "#fff8e8",
+                                color: "#935f00",
+                                borderRadius: 6,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: "4px 8px",
+                                cursor: "pointer",
+                              }}>
+                              Dismiss proposal
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {!isPM && msg.sources?.length > 0 && <SourcesList sources={msg.sources} />}
                   </div>
                 );
@@ -48,7 +118,7 @@ export default function FollowUpThread({ thread, inputVal, onInputChange, onSubm
         <textarea
           value={inputVal}
           onChange={e => onInputChange(e.target.value)}
-          placeholder={'Challenge this score... e.g. "Salesforce already does this - does that change the score?" (Cmd/Ctrl+Enter to send)'}
+          placeholder={'Type naturally: challenge, question, reframe request, note, evidence URL/text, or re-search request. (Cmd/Ctrl+Enter to send)'}
           onKeyDown={e => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && inputVal?.trim() && !loading) onSubmit();
           }}

@@ -9,13 +9,13 @@ const HYBRID_FLOW = [
     key: "analyst_baseline",
     phase: "analyst_baseline",
     title: "Analyst LLM baseline pass",
-    detail: "Creates the first scoring draft from prompt context and model memory only.",
+    detail: "Enumerates evidence first, then applies rubric scoring from that evidence (memory-only pass).",
   },
   {
     key: "analyst_web",
     phase: "analyst_web",
     title: "Web-search LLM pass",
-    detail: "Runs a second analyst draft using live web-search tools and current evidence.",
+    detail: "Enumerates live web evidence, then applies rubric scoring from the enumerated evidence.",
   },
   {
     key: "analyst_reconcile",
@@ -60,7 +60,7 @@ const STANDARD_FLOW = [
     key: "analyst",
     phase: "analyst",
     title: "Analyst LLM pass",
-    detail: "Initial scores and rationale are generated for all dimensions.",
+    detail: "Runs in 2 steps: evidence enumeration first, then rubric scoring from that evidence.",
   },
   {
     key: "critic",
@@ -99,7 +99,7 @@ const LIVE_FLOW = [
     key: "analyst",
     phase: "analyst",
     title: "Analyst + web-search LLM pass",
-    detail: "Scores are generated with live web-search support where evidence is needed.",
+    detail: "Runs in 2 steps: live evidence enumeration, then rubric scoring from enumerated evidence.",
   },
   {
     key: "critic",
@@ -239,7 +239,7 @@ export default function ProgressTab({ uc }) {
         </div>
         <div style={{ fontSize: 12, color: "#17583f", lineHeight: 1.5 }}>
           In <strong>Debate & Challenges</strong>, send follow-up facts, questions, or objections on any dimension.
-          The Analyst LLM responds in-thread and can update the score with explicit reasoning and sources.
+          The Analyst LLM responds in-thread and may propose score updates; you explicitly accept or dismiss each proposal.
         </div>
       </div>
 

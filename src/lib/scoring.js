@@ -1,7 +1,24 @@
+export function getLatestAcceptedFollowUpAdjustment(thread = []) {
+  const accepted = (thread || [])
+    .filter((msg) => {
+      if (msg?.role !== "analyst") return false;
+      const proposalScore = msg?.scoreProposal?.newScore;
+      const proposalAccepted = msg?.scoreProposal?.status === "accepted" && proposalScore != null;
+      const legacyApplied = !msg?.scoreProposal && msg?.scoreAdjusted && msg?.newScore != null;
+      return proposalAccepted || legacyApplied;
+    });
+
+  if (!accepted.length) return null;
+  const last = accepted[accepted.length - 1];
+  return {
+    score: last?.scoreProposal?.newScore ?? last?.newScore ?? null,
+    message: last,
+  };
+}
+
 export function getEffectiveScore(uc, dimId) {
-  const fuAdjusted = (uc.followUps?.[dimId] || [])
-    .filter(f => f.role === "analyst" && f.scoreAdjusted && f.newScore != null);
-  const lastAdj = fuAdjusted.length ? fuAdjusted[fuAdjusted.length - 1].newScore : null;
+  const applied = getLatestAcceptedFollowUpAdjustment(uc.followUps?.[dimId] || []);
+  const lastAdj = applied?.score ?? null;
   return lastAdj
     ?? uc.finalScores?.dimensions?.[dimId]?.finalScore
     ?? uc.dimScores?.[dimId]?.score
