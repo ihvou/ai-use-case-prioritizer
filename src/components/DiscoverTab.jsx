@@ -12,10 +12,25 @@ function improveLabels(candidate, dimMap) {
   }));
 }
 
+function targetLabels(candidate, dimMap) {
+  const targets = Array.isArray(candidate?.targetedWeaknesses) ? candidate.targetedWeaknesses : [];
+  return targets.map((item, idx) => ({
+    key: `${item.dimensionId || "dim"}-${idx}`,
+    label: dimMap.get(item.dimensionId) || item.dimensionId || "Dimension",
+    limitingFactor: String(item?.limitingFactor || "").trim(),
+    resolutionApproach: String(item?.resolutionApproach || "").trim(),
+  }));
+}
+
 export default function DiscoverTab({ uc, dims, onAnalyzeRelated, globalAnalyzing = false }) {
   const dimMap = dimensionLabelMap(dims);
   const candidates = uc.discover?.candidates || [];
   const hasError = !!uc.discover?.error;
+  const generatedCount = Number(uc.discover?.generatedCandidatesCount);
+  const validatedCount = Number(uc.discover?.validatedCandidatesCount);
+  const generated = Number.isFinite(generatedCount) ? generatedCount : candidates.length;
+  const validated = Number.isFinite(validatedCount) ? validatedCount : candidates.length;
+  const rejected = Math.max(0, Number(uc.discover?.rejectedCandidates?.length ?? generated - validated));
 
   if (uc.status === "analyzing" && uc.phase !== "discover") {
     return (
@@ -47,8 +62,14 @@ export default function DiscoverTab({ uc, dims, onAnalyzeRelated, globalAnalyzin
           Related Use Case Discovery
         </div>
         <div style={{ fontSize: 12, color: "var(--ck-muted)", lineHeight: 1.5 }}>
-          These candidates are generated to improve weak dimensions from the completed analysis.
+          These candidates are generated to improve weak dimensions from the completed analysis, then filtered through a lightweight pre-score check.
           Click <strong>Analyse →</strong> to run a full scoring cycle for any candidate.
+          {generated > 0 && (
+            <span style={{ display: "block", marginTop: 4, color: "var(--ck-blue-ink)" }}>
+              Generated {generated} candidate{generated === 1 ? "" : "s"} | Validated {validated}
+              {rejected ? ` | Filtered out ${rejected}` : ""}
+            </span>
+          )}
         </div>
       </div>
 
@@ -66,6 +87,8 @@ export default function DiscoverTab({ uc, dims, onAnalyzeRelated, globalAnalyzin
 
       {candidates.map((candidate, idx) => {
         const improved = improveLabels(candidate, dimMap);
+        const targets = targetLabels(candidate, dimMap);
+        const validationChecks = Array.isArray(candidate?.preValidation?.checks) ? candidate.preValidation.checks : [];
         return (
           <div key={`${candidate.title}-${idx}`} style={{ background: "var(--ck-surface)", border: "1px solid var(--ck-line)", borderRadius: 10, padding: "12px 14px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -99,6 +122,42 @@ export default function DiscoverTab({ uc, dims, onAnalyzeRelated, globalAnalyzin
                         {item.label}
                       </span>
                     ))}
+                  </div>
+                )}
+                {!!targets.length && (
+                  <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                    {targets.map((item) => (
+                      <div key={item.key} style={{ fontSize: 11, color: "var(--ck-muted-soft)", lineHeight: 1.45 }}>
+                        <strong style={{ color: "var(--ck-muted)" }}>{item.label}:</strong> {item.limitingFactor}
+                        {item.resolutionApproach ? ` → ${item.resolutionApproach}` : ""}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!!validationChecks.length && (
+                  <div style={{
+                    marginTop: 8,
+                    background: "var(--ck-blue-soft)",
+                    border: "1px solid #d9e3ff",
+                    borderRadius: 8,
+                    padding: "7px 8px",
+                    display: "grid",
+                    gap: 4,
+                  }}>
+                    <div style={{ fontSize: 10, color: "var(--ck-blue-ink)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Pre-score validation
+                    </div>
+                    {validationChecks.map((check, checkIdx) => {
+                      const label = dimMap.get(check?.dimensionId) || check?.dimensionId || "Dimension";
+                      const current = Number.isFinite(Number(check?.currentScore)) ? `${Number(check.currentScore)}/5` : "?";
+                      const predicted = Number.isFinite(Number(check?.predictedScore)) ? `${Number(check.predictedScore)}/5` : "?";
+                      return (
+                        <div key={`${label}-${checkIdx}`} style={{ fontSize: 11, color: "var(--ck-muted)", lineHeight: 1.4 }}>
+                          <strong>{label}</strong>: {current} → {predicted}
+                          {check?.reason ? ` (${check.reason})` : ""}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

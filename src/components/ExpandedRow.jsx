@@ -17,6 +17,7 @@ const PHASE_LABELS = {
   analyst_baseline: "Analyst baseline pass...",
   analyst_web: "Analyst web pass...",
   analyst_reconcile: "Analyst reconcile pass...",
+  analyst_targeted: "Targeted low-confidence search...",
   critic: "Critic reviewing...",
   finalizing: "Analyst responding...",
   discover: "Discovering related use cases...",
@@ -187,6 +188,11 @@ export default function ExpandedRow({
         <div style={{ padding: "7px 16px", borderBottom: "1px solid var(--ck-line)", background: "var(--ck-surface-soft)", minWidth: 0 }}>
           <div style={{ color: "var(--ck-muted)", fontSize: 11, lineHeight: 1.5, overflowWrap: "anywhere" }}>
             Analyst LLM + Critic LLM pipeline | Sources combine model memory and live web evidence
+            {uc.analysisMeta?.lowConfidenceInitialCount > 0 && uc.status === "complete" && (
+              <span style={{ marginLeft: 6, color: "var(--ck-blue-ink)" }}>
+                | Low-confidence cycle: {uc.analysisMeta.lowConfidenceInitialCount} scanned, {uc.analysisMeta.lowConfidenceUpgradedCount || 0} upgraded, {uc.analysisMeta.lowConfidenceValidatedLowCount || 0} validated low
+              </span>
+            )}
             {uc.analysisMeta?.discoverCandidatesCount != null && uc.status === "complete" && (
               <span style={{ marginLeft: 6, color: "var(--ck-blue-ink)" }}>
                 | Discover: {uc.analysisMeta.discoverCandidatesCount} candidates

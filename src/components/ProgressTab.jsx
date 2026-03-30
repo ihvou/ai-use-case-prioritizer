@@ -24,6 +24,12 @@ const HYBRID_FLOW = [
     detail: "Compares baseline and web drafts, then keeps the strongest evidence-backed points.",
   },
   {
+    key: "analyst_targeted",
+    phase: "analyst_targeted",
+    title: "Targeted low-confidence cycle",
+    detail: "For low-confidence dimensions, generates precise queries, runs focused web search, and re-checks confidence.",
+  },
+  {
     key: "critic",
     phase: "critic",
     title: "Critic LLM review",
@@ -100,7 +106,7 @@ export default function ProgressTab({ uc }) {
         Research Progress
       </div>
       <p style={{ fontSize: 12, color: "var(--ck-muted)", margin: "0 0 12px", lineHeight: 1.55 }}>
-        Live view of the pipeline under the hood: baseline evidence pass, web evidence pass, reconcile, critic audit, and final score update.
+        Live view of the pipeline under the hood: baseline evidence pass, web evidence pass, reconcile, targeted low-confidence re-check, critic audit, and final score update.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

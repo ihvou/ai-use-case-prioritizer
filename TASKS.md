@@ -1,4 +1,4 @@
-## FR - Intent-Aware Interaction Panel
+## [x] FR - Intent-Aware Interaction Panel
 
 **Problem**
 
@@ -24,7 +24,7 @@ The clean principle across all intents: the model proposes, the PM disposes. No 
 
 ---
 
-## FR - Separate Evidence Enumeration from Scoring
+## [x] FR - Separate Evidence Enumeration from Scoring
 
 **Problem**
 
@@ -38,7 +38,7 @@ This means the same evidence produces the same score on re-run. Variance is redu
 
 ---
 
-## FR - Argument-Based Dimension Representation
+## [x] FR - Argument-Based Dimension Representation
 
 **Problem**
 
@@ -60,7 +60,7 @@ Arguments can also be discarded by the PM without debate if they are clearly irr
 
 ---
 
-## FR - Research Brief for Low-Confidence Dimensions
+## [x] FR - Research Brief for Low-Confidence Dimensions
 
 **Problem**
 
@@ -80,7 +80,7 @@ The research brief transforms a low-confidence flag from a dead end into an acti
 
 ---
 
-## FR - Discovery: Limiting Factors Informed Generation + Pre-Score Validation
+## [x] FR - Discovery: Limiting Factors Informed Generation + Pre-Score Validation
 
 **Problem**
 
@@ -98,7 +98,7 @@ The result is that candidates shown to the PM have been screened, not just predi
 
 ---
 
-## FR - Targeted Extra Cycle for Low-Confidence Dimensions
+## [x] FR - Targeted Extra Cycle for Low-Confidence Dimensions
 
 **Problem**
 

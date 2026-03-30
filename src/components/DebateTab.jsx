@@ -20,6 +20,12 @@ export default function DebateTab({
   const phaseInitial = uc.debate?.find(d => d.phase === "initial");
   const phaseCritique = uc.debate?.find(d => d.phase === "critique");
   const phaseResponse = uc.debate?.find(d => d.phase === "response");
+  const analystFinalText = String(
+    phaseResponse?.content?.analystResponse
+    || phaseResponse?.content?.analyst_response
+    || phaseResponse?.content?.response
+    || ""
+  ).trim();
 
   if (!phaseInitial && uc.status !== "analyzing") {
     return <p style={{ color: "var(--ck-muted)", fontSize: 12 }}>Analysis not yet complete.</p>;
@@ -43,10 +49,12 @@ export default function DebateTab({
             <SourcesList sources={phaseCritique.content?.sources} />
           </div>
         )}
-        {phaseResponse?.content?.analystResponse && (
+        {phaseResponse && (
           <div style={{ background: "#edf2ff", border: "1px solid #c9d4ff", borderRadius: 8, padding: "10px 14px" }}>
             <div style={{ fontSize: 10, color: "var(--ck-blue)", fontWeight: 700, marginBottom: 4 }}>ANALYST - FINAL RESPONSE</div>
-            <p style={{ fontSize: 12, color: "var(--ck-blue-ink)", margin: 0, lineHeight: 1.55 }}>{phaseResponse.content.analystResponse}</p>
+            <p style={{ fontSize: 12, color: "var(--ck-blue-ink)", margin: 0, lineHeight: 1.55 }}>
+              {analystFinalText || "Analyst finalized per-dimension updates after critique. See dimension cards below."}
+            </p>
             <SourcesList sources={phaseResponse.content?.sources} />
           </div>
         )}

@@ -426,21 +426,54 @@ function threadHistoryHtml(thread = [], options = {}) {
 function discoverCandidatesHtml(uc, dims = [], options = {}) {
   const { maxItems = 5 } = options;
   const candidates = uc?.discover?.candidates || [];
-  if (!candidates.length) return "<div class=\"muted\">No discovery candidates available.</div>";
   const labelById = new Map((dims || []).map((d) => [d.id, d.label]));
+  const generatedCount = Number(uc?.discover?.generatedCandidatesCount);
+  const validatedCount = Number(uc?.discover?.validatedCandidatesCount);
+  const generated = Number.isFinite(generatedCount) ? generatedCount : candidates.length;
+  const validated = Number.isFinite(validatedCount) ? validatedCount : candidates.length;
+  const rejected = Math.max(0, Number(uc?.discover?.rejectedCandidates?.length ?? generated - validated));
+  const summary = `
+    <div class="discover-summary">
+      Generated ${generated} | Validated ${validated}${rejected ? ` | Filtered out ${rejected}` : ""}
+    </div>
+  `;
+  if (!candidates.length) {
+    return `${summary}<div class="muted">No validated discovery candidates available.</div>`;
+  }
   const items = candidates.slice(0, maxItems).map((c) => {
     const improved = (c?.expectedImprovedDimensions || [])
       .map((id) => labelById.get(id) || id)
       .join(", ");
+    const targeted = (Array.isArray(c?.targetedWeaknesses) ? c.targetedWeaknesses : [])
+      .map((item) => {
+        const label = labelById.get(item?.dimensionId) || item?.dimensionId || "Dimension";
+        const factor = String(item?.limitingFactor || "").trim();
+        const approach = String(item?.resolutionApproach || "").trim();
+        if (!factor && !approach) return "";
+        return `<div class="discover-target"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(factor)}${approach ? ` &rarr; ${escapeHtml(approach)}` : ""}</div>`;
+      })
+      .filter(Boolean)
+      .join("");
+    const checks = (Array.isArray(c?.preValidation?.checks) ? c.preValidation.checks : [])
+      .map((check) => {
+        const label = labelById.get(check?.dimensionId) || check?.dimensionId || "Dimension";
+        const current = Number.isFinite(Number(check?.currentScore)) ? `${Number(check.currentScore)}/5` : "?";
+        const predicted = Number.isFinite(Number(check?.predictedScore)) ? `${Number(check.predictedScore)}/5` : "?";
+        const reason = String(check?.reason || "").trim();
+        return `<div class="discover-check"><strong>${escapeHtml(label)}</strong>: ${escapeHtml(current)} &rarr; ${escapeHtml(predicted)}${reason ? ` (${escapeHtml(reason)})` : ""}</div>`;
+      })
+      .join("");
     return `
       <div class="discover-item">
         <div class="discover-title">${escapeHtml(c?.title || "Untitled candidate")}</div>
         <div class="discover-rationale">${escapeHtml(c?.rationale || "")}</div>
         ${improved ? `<div class="discover-improves">Expected lift: ${escapeHtml(improved)}</div>` : ""}
+        ${targeted ? `<div class="discover-targets">${targeted}</div>` : ""}
+        ${checks ? `<div class="discover-checks"><div class="discover-check-title">Pre-score validation</div>${checks}</div>` : ""}
       </div>
     `;
   }).join("");
-  return `<div class="discover-list">${items}</div>`;
+  return `<div class="discover-list">${summary}${items}</div>`;
 }
 
 function section(label, body, className = "") {
@@ -1087,6 +1120,13 @@ function reportCss(mode = "html") {
       display: grid;
       gap: 6px;
     }
+    .discover-summary {
+      font-size: ${isPdf ? "9.2px" : "9.6px"};
+      color: #1d4ed8;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 1px;
+    }
     .discover-item {
       border: 1px solid #dbe2f0;
       background: #f9fbff;
@@ -1110,6 +1150,38 @@ function reportCss(mode = "html") {
       color: #1d4ed8;
       line-height: 1.2;
       font-weight: 700;
+    }
+    .discover-targets {
+      margin-top: 4px;
+      display: grid;
+      gap: 2px;
+    }
+    .discover-target {
+      font-size: ${isPdf ? "8.9px" : "9.3px"};
+      color: #334155;
+      line-height: 1.2;
+    }
+    .discover-checks {
+      margin-top: 4px;
+      border: 1px solid #dbe2f0;
+      border-radius: 7px;
+      background: #eff6ff;
+      padding: 4px 6px;
+      display: grid;
+      gap: 2px;
+    }
+    .discover-check-title {
+      font-size: ${isPdf ? "8.6px" : "9px"};
+      color: #1d4ed8;
+      line-height: 1.1;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .discover-check {
+      font-size: ${isPdf ? "8.7px" : "9.1px"};
+      color: #1e293b;
+      line-height: 1.2;
     }
     .portfolio-title {
       margin: 0 0 10px;
