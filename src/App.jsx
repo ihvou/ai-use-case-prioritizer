@@ -97,14 +97,14 @@ export default function App() {
     await runNewAnalysis(desc, analysisMode, null);
   }
 
-  async function onFollowUp(ucId, dimId, challenge) {
+  async function onFollowUp(ucId, dimId, challenge, options = {}) {
     if (!challenge.trim()) return;
     const fuKey = `${ucId}::${dimId}`;
     setFuLoading(prev => ({ ...prev, [fuKey]: true }));
     setFuInput(fuKey, "");
 
     try {
-      await handleFollowUp(ucId, dimId, challenge, dims, ucRef, updateUC);
+      await handleFollowUp(ucId, dimId, challenge, dims, ucRef, updateUC, options);
     } catch (err) {
       updateUC(ucId, u => ({
         ...u,
@@ -120,6 +120,31 @@ export default function App() {
       }));
     }
     setFuLoading(prev => ({ ...prev, [fuKey]: false }));
+  }
+
+  function onDiscardArgument(ucId, dimId, argument, reason = "") {
+    if (!argument?.id) return;
+    const detail = String(reason || "").trim();
+    const fallbackText = `Discarded ${argument.group === "limiting" ? "limiting factor" : "supporting evidence"} "${argument.claim || argument.id}"`;
+    updateUC(ucId, (u) => ({
+      ...u,
+      followUps: {
+        ...u.followUps,
+        [dimId]: [...(u.followUps?.[dimId] || []), {
+          id: `fu-pm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: "pm",
+          intent: "note",
+          text: detail ? `${fallbackText}. ${detail}` : fallbackText,
+          argumentAction: {
+            action: "discard",
+            group: argument.group === "limiting" ? "limiting" : "supporting",
+            id: String(argument.id),
+            reason: detail || fallbackText,
+          },
+          timestamp: new Date().toISOString(),
+        }],
+      },
+    }));
   }
 
   function onResolveFollowUpProposal(ucId, dimId, messageId, decision) {
@@ -643,6 +668,7 @@ export default function App() {
                             onFuInputChange={setFuInput}
                             fuLoading={fuLoading}
                             onFollowUp={onFollowUp}
+                            onDiscardArgument={onDiscardArgument}
                             onResolveFollowUpProposal={onResolveFollowUpProposal}
                             onAnalyzeRelated={(candidate) => onAnalyzeRelated(uc, candidate)}
                             globalAnalyzing={globalAnalyzing}

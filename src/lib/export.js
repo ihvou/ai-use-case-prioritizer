@@ -250,6 +250,8 @@ function dimensionScoreIcon(score) {
 function sectionIcon(label) {
   const map = {
     "Strategic Conclusion": "🎯",
+    "Supporting Evidence": "✅",
+    "Limiting Factors": "⚠️",
     "Full Analysis": "🧠",
     "Risks": "⚠️",
     "Sources": "🔎",
@@ -326,6 +328,46 @@ function sourceChipArrayHtml(sources = [], options = {}) {
   return `<div class="source-chip-array">${chips}${extra}</div>`;
 }
 
+function argumentActionSummary(action) {
+  if (!action?.id || !action?.action) return "";
+  const scope = action.group === "limiting" ? "Limiting factor" : "Supporting evidence";
+  if (action.action === "discard") {
+    return `${scope} ${action.id} discarded${action.reason ? ` (${action.reason})` : ""}`;
+  }
+  if (action.action === "modify") {
+    return `${scope} ${action.id} updated${action.reason ? ` (${action.reason})` : ""}`;
+  }
+  if (action.action === "keep") {
+    return `${scope} ${action.id} retained${action.reason ? ` (${action.reason})` : ""}`;
+  }
+  return "";
+}
+
+function argumentRowsHtml(argumentsList = [], options = {}) {
+  const { emptyText = "No arguments available.", maxSourceItems = 4 } = options;
+  if (!argumentsList?.length) return `<div class="muted">${escapeHtml(emptyText)}</div>`;
+  return `
+    <div class="arg-list">
+      ${argumentsList.map((arg, idx) => {
+        const claim = arg?.claim || `Argument ${idx + 1}`;
+        const detail = String(arg?.detail || "").trim();
+        const discarded = arg?.status === "discarded";
+        const reason = discarded
+          ? `Discarded by ${arg?.discardedBy || "reviewer"}${arg?.discardReason ? ` - ${arg.discardReason}` : ""}`
+          : "";
+        return `
+          <div class="arg-item ${discarded ? "arg-item-discarded" : ""}">
+            <div class="arg-claim">${escapeHtml(claim)}</div>
+            ${detail ? `<div class="arg-detail">${escapeHtml(detail)}</div>` : ""}
+            ${reason ? `<div class="arg-discard-note">${escapeHtml(reason)}</div>` : ""}
+            ${arg?.sources?.length ? sourceChipArrayHtml(arg.sources, { maxItems: maxSourceItems }) : ""}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function threadHistoryHtml(thread = [], options = {}) {
   const { maxItems = Number.POSITIVE_INFINITY, maxBodyWords = 0 } = options;
   if (!thread?.length) return "<div class=\"muted\">No follow-up thread.</div>";
@@ -341,7 +383,10 @@ function threadHistoryHtml(thread = [], options = {}) {
     const proposal = m?.role === "analyst" && m?.scoreProposal?.newScore != null
       ? ` [Score proposal ${m.scoreProposal.previousScore}/5 -> ${m.scoreProposal.newScore}/5 (${m.scoreProposal.status || "pending"})]`
       : "";
-    const fullBody = `${body}${proposal}`.trim();
+    const analystArg = m?.role === "analyst" ? argumentActionSummary(m?.argumentUpdate) : "";
+    const pmArg = m?.role === "pm" ? argumentActionSummary(m?.argumentAction) : "";
+    const argSuffix = analystArg || pmArg ? ` [${analystArg || pmArg}]` : "";
+    const fullBody = `${body}${proposal}${argSuffix}`.trim();
     const displayBody = maxBodyWords > 0 ? limitWords(fullBody, maxBodyWords) : fullBody;
     return `
       <div class="thread-item">
@@ -526,6 +571,16 @@ function renderDimensionPage(uc, d, options = {}) {
         <div class="big-brief">${escapeHtml(view.brief || "No brief summary available.")}</div>
       </div>
       <div class="confidence-detail">${escapeHtml(confidenceReasonLine)}</div>
+      ${section(
+        "Supporting Evidence",
+        argumentRowsHtml(view.supportingArguments, { emptyText: "No supporting evidence arguments." }),
+        "compact"
+      )}
+      ${section(
+        "Limiting Factors",
+        argumentRowsHtml(view.limitingArguments, { emptyText: "No limiting-factor arguments." }),
+        "compact"
+      )}
       ${section("Full Analysis", `<div class="small-text pre-wrap">${escapeHtml(fullWithSourceLabels)}</div>`)}
       ${section("Risks", `<div class="small-text pre-wrap">${escapeHtml(view.risks || "No risk notes provided.")}</div>`)}
       ${section("Sources", sourceChipArrayHtml(view.sources), "compact")}
@@ -901,6 +956,43 @@ function reportCss(mode = "html") {
       font-size: ${isPdf ? "10px" : "10.5px"};
       line-height: 1.28;
       color: #334155;
+    }
+    .arg-list {
+      display: grid;
+      gap: 5px;
+    }
+    .arg-item {
+      border: 1px solid #dbe2f0;
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: #f8fbff;
+    }
+    .arg-item-discarded {
+      opacity: 0.72;
+      background: #f8fafc;
+    }
+    .arg-item-discarded .arg-claim,
+    .arg-item-discarded .arg-detail {
+      text-decoration: line-through;
+    }
+    .arg-claim {
+      font-size: ${isPdf ? "10.2px" : "10.6px"};
+      line-height: 1.26;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .arg-detail {
+      margin-top: 2px;
+      font-size: ${isPdf ? "9.6px" : "10px"};
+      line-height: 1.24;
+      color: #334155;
+    }
+    .arg-discard-note {
+      margin-top: 3px;
+      font-size: ${isPdf ? "9px" : "9.4px"};
+      line-height: 1.2;
+      color: #935f00;
+      font-weight: 700;
     }
     .pre-wrap {
       white-space: pre-wrap;

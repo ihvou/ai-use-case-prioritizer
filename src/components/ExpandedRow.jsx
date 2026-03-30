@@ -29,6 +29,7 @@ export default function ExpandedRow({
   onFuInputChange,
   fuLoading,
   onFollowUp,
+  onDiscardArgument,
   onResolveFollowUpProposal,
   onAnalyzeRelated,
   globalAnalyzing = false,
@@ -235,6 +236,7 @@ export default function ExpandedRow({
             uc={uc} dims={dims}
             fuInputs={fuInputs} onFuInputChange={onFuInputChange}
             fuLoading={fuLoading} onFollowUp={onFollowUp}
+            onDiscardArgument={onDiscardArgument}
             onResolveFollowUpProposal={onResolveFollowUpProposal}
           />
         )}

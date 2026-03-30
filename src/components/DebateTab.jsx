@@ -2,6 +2,7 @@ import ScorePill from "./ScorePill";
 import SourcesList from "./SourcesList";
 import FollowUpThread from "./FollowUpThread";
 import ConfidenceBadge from "./ConfidenceBadge";
+import ArgumentList from "./ArgumentList";
 import { getDimensionView } from "../lib/dimensionView";
 import { getLatestAcceptedFollowUpAdjustment } from "../lib/scoring";
 
@@ -12,6 +13,7 @@ export default function DebateTab({
   onFuInputChange,
   fuLoading,
   onFollowUp,
+  onDiscardArgument,
   onResolveFollowUpProposal,
 }) {
   const phaseInitial = uc.debate?.find(d => d.phase === "initial");
@@ -62,8 +64,27 @@ export default function DebateTab({
           const accepted = getLatestAcceptedFollowUpAdjustment(thread);
           const pmAdjustedScore = accepted?.score ?? null;
           const fuKey = `${uc.id}::${d.id}`;
+          const loading = !!fuLoading[fuKey];
 
           if (!initScore) return null;
+
+          const handleChallengeArgument = (arg) => {
+            const summary = String(arg?.detail || "").trim();
+            const challenge = `Please re-evaluate this ${arg?.group === "limiting" ? "limiting factor" : "supporting evidence"} argument: "${arg?.claim || arg?.id}". ${summary ? `Context: ${summary}` : ""}`.trim();
+            onFollowUp(uc.id, d.id, challenge, {
+              forceIntent: "challenge",
+              targetArgument: {
+                id: arg?.id,
+                group: arg?.group,
+                claim: arg?.claim,
+                detail: arg?.detail,
+              },
+            });
+          };
+
+          const handleDiscardArgument = (arg) => {
+            onDiscardArgument?.(uc.id, d.id, arg);
+          };
 
           return (
             <div key={d.id} style={{ background: "var(--ck-surface)", border: "1px solid var(--ck-line)", borderRadius: 10, overflow: "hidden" }}>
@@ -86,6 +107,23 @@ export default function DebateTab({
                     </>
                   )}
                 </div>
+              </div>
+
+              <div style={{ padding: "10px 14px 0", display: "grid", gap: 8 }}>
+                <ArgumentList
+                  group="supporting"
+                  argumentsList={view.supportingArguments}
+                  onChallenge={handleChallengeArgument}
+                  onDiscard={handleDiscardArgument}
+                  actionDisabled={loading}
+                />
+                <ArgumentList
+                  group="limiting"
+                  argumentsList={view.limitingArguments}
+                  onChallenge={handleChallengeArgument}
+                  onDiscard={handleDiscardArgument}
+                  actionDisabled={loading}
+                />
               </div>
 
               {crit && (
@@ -113,7 +151,7 @@ export default function DebateTab({
                   onInputChange={val => onFuInputChange(fuKey, val)}
                   onSubmit={() => onFollowUp(uc.id, d.id, fuInputs[fuKey] || "")}
                   onResolveProposal={(messageId, decision) => onResolveFollowUpProposal?.(uc.id, d.id, messageId, decision)}
-                  loading={!!fuLoading[fuKey]}
+                  loading={loading}
                 />
               </div>
             </div>

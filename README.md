@@ -16,6 +16,8 @@ It converts broad ideas into evidence-backed scores, debate outcomes, and next b
 After completion, PM can:
 - review Overview / Dimensions / Debate & Challenges / Discover / Progress tabs,
 - use follow-up in-thread with intent-aware handling (challenge, question, reframe, add evidence, note/comment, re-search),
+- inspect each dimension as structured arguments (supporting evidence vs limiting factors),
+- challenge a specific argument directly or discard an argument (discarded items remain visible for audit),
 - review and explicitly **accept** or **dismiss** any proposed score change (no silent score mutation),
 - run full analysis for a discovered candidate via **Analyse ->**,
 - export portfolio or single-use-case reports.
@@ -48,6 +50,9 @@ Each dimension includes:
 - risks
 - sources
 - confidence + reason
+- `arguments.supporting[]`: evidence claims that push score up
+- `arguments.limiting[]`: constraints that cap score
+- argument audit state: active/discarded, discard reason, and thread-linked updates
 
 ## Export Options
 
@@ -65,6 +70,11 @@ Single-use-case panel:
 - `Export PDF`
 - `Export Images ZIP`
 - `Export JSON`
+
+Report pages include argument sections per dimension:
+- `Supporting Evidence`
+- `Limiting Factors`
+- discarded arguments shown as discarded (not deleted)
 
 ## Tech Stack
 
@@ -88,6 +98,7 @@ ai-use-case-prioritizer/
     App.jsx
     components/
       ConfidenceBadge.jsx
+      ArgumentList.jsx
       DebateTab.jsx
       DiscoverTab.jsx
       DimensionsTab.jsx
@@ -102,6 +113,7 @@ ai-use-case-prioritizer/
       useFollowUp.js
     lib/
       api.js
+      arguments.js
       debug.js
       dimensionView.js
       export.js

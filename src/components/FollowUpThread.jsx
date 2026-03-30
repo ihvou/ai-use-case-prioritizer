@@ -13,6 +13,22 @@ function proposalTone(status) {
   return { bg: "#edf2ff", border: "#c9d4ff", text: "var(--ck-blue-ink)", label: "Pending PM decision" };
 }
 
+function argumentUpdateText(msg) {
+  const update = msg?.argumentUpdate;
+  if (!update?.id || !update?.action) return "";
+  const scope = update.group === "limiting" ? "Limiting factor" : "Supporting evidence";
+  if (update.action === "discard") {
+    return `${scope} ${update.id} discarded${update.reason ? ` - ${update.reason}` : ""}`;
+  }
+  if (update.action === "modify") {
+    return `${scope} ${update.id} updated${update.reason ? ` - ${update.reason}` : ""}`;
+  }
+  if (update.action === "keep") {
+    return `${scope} ${update.id} retained${update.reason ? ` - ${update.reason}` : ""}`;
+  }
+  return "";
+}
+
 export default function FollowUpThread({
   thread,
   inputVal,
@@ -104,6 +120,11 @@ export default function FollowUpThread({
                             </button>
                           </div>
                         )}
+                      </div>
+                    )}
+                    {!isPM && argumentUpdateText(msg) && (
+                      <div style={{ margin: "4px 0 2px", fontSize: 10, color: "var(--ck-blue-ink)", fontWeight: 700 }}>
+                        {argumentUpdateText(msg)}
                       </div>
                     )}
                     {!isPM && msg.sources?.length > 0 && <SourcesList sources={msg.sources} />}

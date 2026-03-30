@@ -61,6 +61,47 @@ function clampScore(value) {
   return n;
 }
 
+function normalizeTargetArgument(input) {
+  if (!input || typeof input !== "object") return null;
+  const id = String(input.id || "").trim();
+  if (!id) return null;
+  const rawGroup = String(input.group || "").trim().toLowerCase();
+  return {
+    id,
+    group: rawGroup === "limiting" ? "limiting" : "supporting",
+    claim: String(input.claim || "").trim(),
+    detail: String(input.detail || "").trim(),
+  };
+}
+
+function normalizeArgumentUpdate(raw, fallbackTarget) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id || fallbackTarget?.id || "").trim();
+  if (!id) return null;
+  const rawAction = String(raw.action || "").trim().toLowerCase();
+  const action = rawAction === "discard" || rawAction === "modify" || rawAction === "keep" || rawAction === "none"
+    ? rawAction
+    : "";
+  if (!action) return null;
+  const rawGroup = String(raw.group || fallbackTarget?.group || "").trim().toLowerCase();
+  const group = rawGroup === "limiting" ? "limiting" : "supporting";
+  const reason = String(raw.reason || "").trim();
+
+  if (action === "keep" || action === "none") {
+    return { id, group, action, reason };
+  }
+
+  return {
+    id,
+    group,
+    action,
+    reason,
+    updatedClaim: String(raw.updatedClaim || "").trim(),
+    updatedDetail: String(raw.updatedDetail || "").trim(),
+    sources: normalizeSources(raw.sources),
+  };
+}
+
 function appendThreadMessage(updateUC, ucId, dimId, message) {
   updateUC(ucId, (u) => ({
     ...u,
@@ -220,6 +261,7 @@ async function runIntentResponse({
   challenge,
   effectiveScore,
   threadHistory,
+  targetArgument,
 }) {
   const baseHeader = renderPromptHeader({ uc, dim, effectiveScore, threadHistory });
   const analysisMode = uc.analysisMeta?.analysisMode || "standard";
@@ -346,8 +388,25 @@ Return ONLY JSON:
     return { parsed: safeParseJSON(data.text), meta: data.meta || null };
   }
 
+  const targetArgumentBlock = targetArgument
+    ? `Target argument under review:
+{
+  "id": "${targetArgument.id}",
+  "group": "${targetArgument.group}",
+  "claim": "${targetArgument.claim}",
+  "detail": "${targetArgument.detail}"
+}
+
+You are responding to a challenge focused on this argument.
+- Keep: argument remains valid.
+- Modify: rewrite claim/detail/sources for this argument.
+- Discard: argument is no longer valid.
+`
+    : "";
+
   const prompt = `${baseHeader}
 PM challenge: "${challenge}"
+${targetArgumentBlock}
 
 Respond directly. If valid, concede with an updated argument and proposed score.
 If not valid, defend with new evidence.
@@ -366,6 +425,15 @@ Return ONLY JSON:
   "brief": "<2-3 plain-language sentences>",
   "response": "<3-5 direct analytical sentences>",
   "sources": [{"name":"...","quote":"<max 15 words>","url":"..."}],
+  "argumentUpdate": {
+    "id": "<argument id or empty>",
+    "group": "<supporting|limiting>",
+    "action": "<keep|discard|modify|none>",
+    "updatedClaim": "<required if modify>",
+    "updatedDetail": "<required if modify>",
+    "sources": [{"name":"...","quote":"<max 15 words>","url":"..."}],
+    "reason": "<1 sentence why keep/modify/discard>"
+  },
   "proposedScore": <null or integer 1-5>,
   "proposalReason": "<1-2 sentences>"
 }`;
@@ -373,9 +441,11 @@ Return ONLY JSON:
   return { parsed: safeParseJSON(raw), meta: null };
 }
 
-export async function handleFollowUp(ucId, dimId, challenge, dims, ucRef, updateUC) {
+export async function handleFollowUp(ucId, dimId, challenge, dims, ucRef, updateUC, options = {}) {
   const uc = ucRef.current.find((u) => u.id === ucId);
   const dim = dims.find((d) => d.id === dimId);
+  const forcedIntent = normalizeFollowUpIntent(options?.forceIntent);
+  const targetArgument = normalizeTargetArgument(options?.targetArgument);
   const effectiveScore = getEffectiveScore(uc, dimId);
   const existingThread = uc.followUps?.[dimId] || [];
   const threadHistory = existingThread
@@ -387,11 +457,18 @@ export async function handleFollowUp(ucId, dimId, challenge, dims, ucRef, update
     id: pmId,
     role: "pm",
     text: challenge,
-    intent: "pending",
+    intent: forcedIntent || "pending",
+    targetArgument: targetArgument || null,
     timestamp: new Date().toISOString(),
   });
 
-  const classification = await classifyIntent({ uc, dim, challenge, existingThread });
+  const classification = forcedIntent
+    ? {
+        intent: forcedIntent,
+        rationale: "Intent forced by UI action.",
+        urls: extractUrls(challenge),
+      }
+    : await classifyIntent({ uc, dim, challenge, existingThread });
   const intent = classification.intent;
   patchThreadMessage(updateUC, ucId, dimId, pmId, {
     intent,
@@ -407,16 +484,19 @@ export async function handleFollowUp(ucId, dimId, challenge, dims, ucRef, update
     challenge,
     effectiveScore,
     threadHistory,
+    targetArgument,
   });
 
   const { normalizedConfidence, normalizedReason } = normalizeConfidence(parsed, uc, dimId);
   const proposedScore = extractProposedScore(parsed, effectiveScore, intentAllowsScoreProposal(intent));
   const hasPendingProposal = proposedScore != null;
+  const argumentUpdate = normalizeArgumentUpdate(parsed?.argumentUpdate, targetArgument);
 
   appendThreadMessage(updateUC, ucId, dimId, {
     id: makeId("fu-analyst"),
     role: "analyst",
     intent,
+    targetArgument: targetArgument || null,
     response: String(parsed?.response || "").trim() || "No response generated.",
     brief: String(parsed?.brief || "").trim(),
     sources: normalizeSources(parsed?.sources),
@@ -432,8 +512,8 @@ export async function handleFollowUp(ucId, dimId, challenge, dims, ucRef, update
           reason: String(parsed?.proposalReason || "").trim(),
         }
       : null,
+    argumentUpdate,
     searchMeta: meta || null,
     timestamp: new Date().toISOString(),
   });
 }
-

@@ -2,6 +2,7 @@ import ScorePill from "./ScorePill";
 import DimRubricToggle from "./DimRubricToggle";
 import EvidenceBlock from "./EvidenceBlock";
 import ConfidenceBadge from "./ConfidenceBadge";
+import ArgumentList from "./ArgumentList";
 import { getDimensionView } from "../lib/dimensionView";
 
 export default function DimensionsTab({ uc, dims }) {
@@ -42,6 +43,10 @@ export default function DimensionsTab({ uc, dims }) {
               </div>
             </div>
             <DimRubricToggle dim={d} />
+            <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+              <ArgumentList group="supporting" argumentsList={view.supportingArguments} />
+              <ArgumentList group="limiting" argumentsList={view.limitingArguments} />
+            </div>
             <EvidenceBlock
               brief={view.brief}
               full={view.full}

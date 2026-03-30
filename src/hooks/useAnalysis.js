@@ -2,6 +2,7 @@ import { callAnalystAPI, callCriticAPI } from "../lib/api";
 import { safeParseJSON, buildDimRubrics } from "../lib/json";
 import { buildRubricCalibrationBlock } from "../lib/rubric";
 import { normalizeConfidenceLevel } from "../lib/confidence";
+import { ensureDimensionArgumentShape } from "../lib/arguments";
 import {
   createAnalysisDebugSession,
   appendAnalysisDebugEvent,
@@ -13,7 +14,7 @@ import { SYS_ANALYST, SYS_CRITIC, SYS_ANALYST_RESPONSE } from "../prompts/system
 function buildDimJsonTemplate(dims, condensed = false) {
   if (condensed) {
     return dims.map((d) =>
-      `"${d.id}": {"score": <1-5>, "confidence": "<high|medium|low>", "confidenceReason": "<1 sentence>", "brief": "<max 20 words>", "full": "<1 paragraph, max 80 words, cite 1-2 named companies>", "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}], "risks": "<max 20 words>"}`
+      `"${d.id}": {"score": <1-5>, "confidence": "<high|medium|low>", "confidenceReason": "<1 sentence>", "brief": "<max 20 words>", "full": "<1 paragraph, max 80 words, cite 1-2 named companies>", "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}], "risks": "<max 20 words>", "arguments": {"supporting":[{"id":"sup-1","claim":"<max 12 words>","detail":"<max 18 words>","sources":[{"name":"...","quote":"<max 12 words>","url":"..."}]}], "limiting":[{"id":"lim-1","claim":"<max 12 words>","detail":"<max 18 words>","sources":[{"name":"...","quote":"<max 12 words>","url":"..."}]}]}}`
     ).join(",\n    ");
   }
 
@@ -27,7 +28,25 @@ function buildDimJsonTemplate(dims, condensed = false) {
       "sources": [
         {"name": "<source name>", "quote": "<paraphrased insight, max 15 words>", "url": "<real URL if known, else omit field>"}
       ],
-      "risks": "<1-2 sentences on key risks or caveats for this dimension>"
+      "risks": "<1-2 sentences on key risks or caveats for this dimension>",
+      "arguments": {
+        "supporting": [
+          {
+            "id": "<stable id like sup-1>",
+            "claim": "<bold one-line supporting claim>",
+            "detail": "<1-2 sentence explanation>",
+            "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}]
+          }
+        ],
+        "limiting": [
+          {
+            "id": "<stable id like lim-1>",
+            "claim": "<bold one-line limiting claim>",
+            "detail": "<1-2 sentence explanation>",
+            "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}]
+          }
+        ]
+      }
     }`
   ).join(",\n    ");
 }
@@ -557,6 +576,17 @@ function ensureDimensionConfidence(payload, dims) {
   return out;
 }
 
+function ensureDimensionArguments(payload, dims) {
+  const out = payload || {};
+  out.dimensions = out.dimensions || {};
+  dims.forEach((d) => {
+    out.dimensions[d.id] = out.dimensions[d.id] || {};
+    const shape = ensureDimensionArgumentShape(out.dimensions[d.id], d.id);
+    out.dimensions[d.id].arguments = shape;
+  });
+  return out;
+}
+
 function sanitizeEvidenceItem(item) {
   if (!item || typeof item !== "object") return null;
   const point = String(item.point || "").trim();
@@ -595,7 +625,7 @@ function ensureEvidencePayload(payload, dims) {
 }
 
 function attachEnumeratedEvidence(scoredPayload, evidencePayload, dims) {
-  const out = ensureDimensionConfidence(scoredPayload, dims);
+  const out = ensureDimensionArguments(ensureDimensionConfidence(scoredPayload, dims), dims);
   out.attributes = {
     ...(evidencePayload?.attributes || {}),
     ...(out.attributes && typeof out.attributes === "object" ? out.attributes : {}),
@@ -1071,7 +1101,25 @@ Return ONLY this JSON:
       "confidenceReason": "<1 sentence explaining confidence level>",
       "brief": "<2-3 plain-language sentences, max 65 words, explain why this score is deserved and what prevents a higher score>",
       "response": "<3-4 sentences: concede or defend with new specific evidence>",
-      "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}]
+      "sources": [{"name": "...", "quote": "<max 15 words>", "url": "..."}],
+      "arguments": {
+        "supporting": [
+          {
+            "id": "<stable id like sup-1>",
+            "claim": "<one-line supporting claim>",
+            "detail": "<1-2 sentence explanation>",
+            "sources": [{"name":"...","quote":"<max 15 words>","url":"..."}]
+          }
+        ],
+        "limiting": [
+          {
+            "id": "<stable id like lim-1>",
+            "claim": "<one-line limiting claim>",
+            "detail": "<1-2 sentence explanation>",
+            "sources": [{"name":"...","quote":"<max 15 words>","url":"..."}]
+          }
+        ]
+      }
     }`).join(",\n    ")}
   },
   "conclusion": "<2-3 sentence strategic recommendation: should the outsourcing company pursue this, and how?>"
@@ -1090,13 +1138,13 @@ Return ONLY this JSON:
 
     let p3;
     try {
-      p3 = ensureDimensionConfidence(parseWithDiagnostics(r3, {
+      p3 = ensureDimensionArguments(ensureDimensionConfidence(parseWithDiagnostics(r3, {
         phase: "finalizing",
         attempt: "full",
         useCaseId: id,
         analysisMode,
         prompt: phase3Prompt,
-      }, debugSession), dims);
+      }, debugSession), dims), dims);
     } catch (err) {
       console.warn("Analyst response parse failed, retrying with strict condensed prompt:", err.message);
       const phase3RetryPrompt = `${phase3Prompt}
@@ -1111,6 +1159,8 @@ STRICT JSON RULES:
 - Keep each dimension "brief" <= 65 words, 2-3 plain-language sentences, and explain why score is not lower and not higher.
 - Do not use the literal phrasing "Above 0 because" / "Below 5 because".
 - Keep each dimension "response" <= 45 words.
+- Keep each dimension "arguments.supporting" and "arguments.limiting" to 2-3 items each.
+- Keep each argument claim concise (<16 words) and detail concise (<28 words).
 - Keep "conclusion" <= 50 words.
 `;
       r3 = await callAnalystAPI([{ role: "user", content: phase3RetryPrompt }], SYS_ANALYST_RESPONSE, 4200);
@@ -1123,13 +1173,13 @@ STRICT JSON RULES:
         responseExcerpt: shortText(r3, 6000),
         response: shortText(r3, 100000),
       });
-      p3 = ensureDimensionConfidence(parseWithDiagnostics(r3, {
+      p3 = ensureDimensionArguments(ensureDimensionConfidence(parseWithDiagnostics(r3, {
         phase: "finalizing",
         attempt: "condensed_retry",
         useCaseId: id,
         analysisMode,
         prompt: phase3RetryPrompt,
-      }, debugSession), dims);
+      }, debugSession), dims), dims);
     }
 
     let finalResponse = p3;
@@ -1153,7 +1203,7 @@ STRICT JSON RULES:
         prompt: consistencyPrompt,
       }, debugSession);
       const { adjusted, changed } = applyConsistencyAdjustments(p3, audit, dims);
-      finalResponse = ensureDimensionConfidence(adjusted, dims);
+      finalResponse = ensureDimensionArguments(ensureDimensionConfidence(adjusted, dims), dims);
       appendAnalysisDebugEvent(debugSession, {
         type: "consistency_check_applied",
         phase: "finalizing_consistency",

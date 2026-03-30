@@ -1,5 +1,6 @@
 import { getEffectiveScore } from "./scoring";
 import { normalizeConfidenceLevel } from "./confidence";
+import { ensureDimensionArgumentShape, applyThreadArgumentUpdates } from "./arguments";
 
 function mergeSources(...lists) {
   const merged = [];
@@ -69,6 +70,10 @@ export function getDimensionView(uc, dimId) {
     || initial?.confidenceReason
     || "";
 
+  const baseArgumentDim = followUp?.arguments || debate || initial || {};
+  const baseArguments = ensureDimensionArgumentShape(baseArgumentDim, dimId);
+  const appliedArguments = applyThreadArgumentUpdates(baseArguments, thread);
+
   return {
     initial,
     debate,
@@ -82,6 +87,9 @@ export function getDimensionView(uc, dimId) {
     sources,
     confidence,
     confidenceReason,
+    arguments: appliedArguments,
+    supportingArguments: appliedArguments.supporting,
+    limitingArguments: appliedArguments.limiting,
   };
 }
 
