@@ -265,8 +265,6 @@ async function runIntentResponse({
   targetArgument,
 }) {
   const baseHeader = renderPromptHeader({ uc, dim, effectiveScore, threadHistory });
-  const analysisMode = uc.analysisMeta?.analysisMode || "standard";
-  const liveSearchAllowed = analysisMode !== "standard";
 
   if (intent === FOLLOW_UP_INTENTS.NOTE) {
     return { skipAnalyst: true };
@@ -333,26 +331,6 @@ Return ONLY JSON:
   }
 
   if (intent === FOLLOW_UP_INTENTS.RE_SEARCH) {
-    if (!liveSearchAllowed) {
-      return {
-        parsed: {
-          response: "Re-search needs live web mode. This use case is in Standard mode, so I cannot run a fresh web pass here. Re-run in Live Search or Hybrid mode, then ask re-search again for this dimension.",
-          sources: [],
-          proposedScore: null,
-          confidence: normalizeConfidenceLevel(
-            uc.finalScores?.dimensions?.[dim?.id]?.confidence || uc.dimScores?.[dim?.id]?.confidence || "medium"
-          ),
-          confidenceReason: uc.finalScores?.dimensions?.[dim?.id]?.confidenceReason || uc.dimScores?.[dim?.id]?.confidenceReason || "",
-        },
-        meta: {
-          liveSearchRequested: true,
-          liveSearchUsed: false,
-          webSearchCalls: 0,
-          liveSearchFallbackReason: "Analysis mode is standard.",
-        },
-      };
-    }
-
     const dimView = getDimensionView(uc, dim?.id, { dimLabel: dim?.label || "" });
     const gapHint = dimView?.researchBrief?.missingEvidence
       || uc.finalScores?.dimensions?.[dim?.id]?.confidenceReason

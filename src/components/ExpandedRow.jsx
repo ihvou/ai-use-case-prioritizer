@@ -186,37 +186,10 @@ export default function ExpandedRow({
       {uc.status !== "analyzing" && (
         <div style={{ padding: "7px 16px", borderBottom: "1px solid var(--ck-line)", background: "var(--ck-surface-soft)", minWidth: 0 }}>
           <div style={{ color: "var(--ck-muted)", fontSize: 11, lineHeight: 1.5, overflowWrap: "anywhere" }}>
-            Analyst LLM + Critic LLM pipeline | Sources can come from model memory and optional live web-search passes
-            {uc.analysisMeta?.analysisMode && (
-              <span style={{ marginLeft: 6 }}>
-                | Mode: {uc.analysisMeta.analysisMode === "hybrid" ? "hybrid reliability" : uc.analysisMeta.analysisMode}
-              </span>
-            )}
-            {uc.analysisMeta?.liveSearchRequested && (
-              <span style={{ marginLeft: 6, color: "var(--ck-blue)" }}>
-                | Live search {uc.analysisMeta?.liveSearchUsed ? `on (${uc.analysisMeta?.webSearchCalls || 0} calls)` : "fallback"}
-              </span>
-            )}
-            {uc.analysisMeta?.hybridStats && (
-              <span style={{ marginLeft: 6, color: "var(--ck-blue-ink)" }}>
-                | Hybrid delta: {uc.analysisMeta.hybridStats.changedFromBaseline} dims
-              </span>
-            )}
-            {uc.analysisMeta?.criticLiveSearchRequested && (
-              <span style={{ marginLeft: 6, color: "var(--ck-blue)" }}>
-                | Critic audit search {uc.analysisMeta?.criticLiveSearchUsed
-                  ? `on (${uc.analysisMeta?.criticWebSearchCalls || 0} calls)`
-                  : "fallback"}
-              </span>
-            )}
+            Analyst LLM + Critic LLM pipeline | Sources combine model memory and live web evidence
             {uc.analysisMeta?.discoverCandidatesCount != null && uc.status === "complete" && (
               <span style={{ marginLeft: 6, color: "var(--ck-blue-ink)" }}>
                 | Discover: {uc.analysisMeta.discoverCandidatesCount} candidates
-              </span>
-            )}
-            {uc.analysisMeta?.criticLiveSearchFallbackReason && (
-              <span title={uc.analysisMeta.criticLiveSearchFallbackReason} style={{ marginLeft: 6, color: "#935f00" }}>
-                | Critic fallback reason available
               </span>
             )}
           </div>

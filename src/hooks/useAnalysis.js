@@ -893,9 +893,8 @@ async function runHybridPhase1(desc, dims, updateUC, id, analysisMeta, debugSess
 }
 
 export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
-  const analysisMode = options.analysisMode || (options.liveSearch ? "live_search" : "standard");
-  const liveSearch = analysisMode === "live_search";
-  const criticLiveSearch = analysisMode !== "standard";
+  const analysisMode = "hybrid";
+  const criticLiveSearch = true;
   const downloadDebugLog = !!options.downloadDebugLog;
 
   const debugSession = createAnalysisDebugSession({
@@ -909,13 +908,13 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
     phase: "analyst",
     attempt: "init",
     analysisMode,
-    liveSearch,
+    liveSearch: true,
   });
 
   const debate = [];
   const analysisMeta = {
     analysisMode,
-    liveSearchRequested: analysisMode !== "standard",
+    liveSearchRequested: true,
     liveSearchUsed: false,
     webSearchCalls: 0,
     liveSearchFallbackReason: null,
@@ -923,7 +922,7 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
     criticLiveSearchUsed: false,
     criticWebSearchCalls: 0,
     criticLiveSearchFallbackReason: null,
-    discoveryLiveSearchRequested: analysisMode !== "standard",
+    discoveryLiveSearchRequested: true,
     discoveryLiveSearchUsed: false,
     discoveryWebSearchCalls: 0,
     discoveryLiveSearchFallbackReason: null,
@@ -935,25 +934,8 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
   let runError = null;
   try {
     // Phase 1: Analyst
-    updateUC(id, (u) => ({ ...u, phase: analysisMode === "hybrid" ? "analyst_baseline" : "analyst" }));
-
-    const p1 = analysisMode === "hybrid"
-      ? await runHybridPhase1(desc, dims, updateUC, id, analysisMeta, debugSession)
-      : await runAnalystPass({
-        evidencePromptBuilder: (condensed) => buildPhase1EvidencePrompt(desc, dims, { liveSearch, condensed }),
-        scoringPromptBuilder: (evidence, condensed) => buildPhase1ScoringPrompt(desc, dims, evidence, {
-          condensed,
-          passLabel: liveSearch ? "live-search analyst pass" : "standard analyst pass",
-        }),
-        dims,
-        analysisMeta,
-        debugContext: { useCaseId: id, analysisMode },
-        debugSession,
-        liveSearch,
-        evidenceMaxTokens: 10000,
-        scoringMaxTokens: 12000,
-        passLabel: "analyst",
-      });
+    updateUC(id, (u) => ({ ...u, phase: "analyst_baseline" }));
+    const p1 = await runHybridPhase1(desc, dims, updateUC, id, analysisMeta, debugSession);
 
     appendAnalysisDebugEvent(debugSession, {
       type: "phase_complete",
@@ -1237,7 +1219,7 @@ STRICT JSON RULES:
     }));
 
     // Phase 4: Related use case discovery (non-blocking)
-    const discoveryLiveSearch = analysisMode !== "standard";
+    const discoveryLiveSearch = true;
     let discover = {
       candidates: [],
       error: null,

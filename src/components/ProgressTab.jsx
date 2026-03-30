@@ -27,7 +27,7 @@ const HYBRID_FLOW = [
     key: "critic",
     phase: "critic",
     title: "Critic LLM review",
-    detail: "A skeptical model challenges analyst assumptions and scoring without live web search in this mode.",
+    detail: "A skeptical model audits analyst claims against current web evidence and challenges weak assumptions.",
   },
   {
     key: "finalizing",
@@ -39,7 +39,7 @@ const HYBRID_FLOW = [
     key: "discover",
     phase: "discover",
     title: "Related use case discovery",
-    detail: "Generates sharper variants targeting weak dimensions, using the same mode as the parent analysis.",
+    detail: "Generates sharper variants targeting weak dimensions, grounded in the same evidence-first pipeline.",
   },
   {
     key: "complete",
@@ -48,90 +48,6 @@ const HYBRID_FLOW = [
     detail: "All dimensions, evidence, and exports are ready.",
   },
 ];
-
-const STANDARD_FLOW = [
-  {
-    key: "submitted",
-    phase: "submitted",
-    title: "Use case submitted",
-    detail: "The request is queued and the analysis pipeline started.",
-  },
-  {
-    key: "analyst",
-    phase: "analyst",
-    title: "Analyst LLM pass",
-    detail: "Runs in 2 steps: evidence enumeration first, then rubric scoring from that evidence.",
-  },
-  {
-    key: "critic",
-    phase: "critic",
-    title: "Critic LLM web-audit review",
-    detail: "A skeptical model verifies analyst claims with live search and challenges weak assumptions.",
-  },
-  {
-    key: "finalizing",
-    phase: "finalizing",
-    title: "Analyst LLM final response",
-    detail: "Scores and reasoning are updated after debate.",
-  },
-  {
-    key: "discover",
-    phase: "discover",
-    title: "Related use case discovery",
-    detail: "Generates weak-point-targeted variants without live web search in Standard mode.",
-  },
-  {
-    key: "complete",
-    phase: "complete",
-    title: "Final report ready",
-    detail: "All dimensions, evidence, and exports are ready.",
-  },
-];
-
-const LIVE_FLOW = [
-  {
-    key: "submitted",
-    phase: "submitted",
-    title: "Use case submitted",
-    detail: "The request is queued and the analysis pipeline started.",
-  },
-  {
-    key: "analyst",
-    phase: "analyst",
-    title: "Analyst + web-search LLM pass",
-    detail: "Runs in 2 steps: live evidence enumeration, then rubric scoring from enumerated evidence.",
-  },
-  {
-    key: "critic",
-    phase: "critic",
-    title: "Critic LLM web-audit review",
-    detail: "A skeptical model verifies analyst claims with live search and challenges weak assumptions.",
-  },
-  {
-    key: "finalizing",
-    phase: "finalizing",
-    title: "Analyst LLM final response",
-    detail: "Scores and reasoning are updated after debate.",
-  },
-  {
-    key: "discover",
-    phase: "discover",
-    title: "Related use case discovery",
-    detail: "Generates weak-point-targeted variants with live web support in this mode.",
-  },
-  {
-    key: "complete",
-    phase: "complete",
-    title: "Final report ready",
-    detail: "All dimensions, evidence, and exports are ready.",
-  },
-];
-
-function flowForMode(mode) {
-  if (mode === "hybrid") return HYBRID_FLOW;
-  if (mode === "live_search") return LIVE_FLOW;
-  return STANDARD_FLOW;
-}
 
 function phaseRankMap(flow) {
   const map = {};
@@ -174,8 +90,7 @@ function stateBackground(state) {
 }
 
 export default function ProgressTab({ uc }) {
-  const mode = uc.analysisMeta?.analysisMode || "standard";
-  const flow = flowForMode(mode);
+  const flow = HYBRID_FLOW;
   const rank = phaseRankMap(flow);
   const currentIdx = rank[uc.phase] ?? 0;
 
@@ -185,7 +100,7 @@ export default function ProgressTab({ uc }) {
         Research Progress
       </div>
       <p style={{ fontSize: 12, color: "var(--ck-muted)", margin: "0 0 12px", lineHeight: 1.55 }}>
-        Live view of the pipeline under the hood: Analyst LLM, optional web-search LLM passes, Critic LLM review, and final score reconciliation.
+        Live view of the pipeline under the hood: baseline evidence pass, web evidence pass, reconcile, critic audit, and final score update.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

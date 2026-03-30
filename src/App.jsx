@@ -18,6 +18,8 @@ import DimRubricToggle from "./components/DimRubricToggle";
 import ExpandedRow from "./components/ExpandedRow";
 import ConfidenceBadge from "./components/ConfidenceBadge";
 
+const INTERNAL_ANALYSIS_MODE = "hybrid";
+
 export default function App() {
   const [useCases, setUseCases] = useState([]);
   const [dims, setDims] = useState(DEFAULT_DIMS);
@@ -26,7 +28,6 @@ export default function App() {
   const [showDimsPanel, setShowDimsPanel] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [globalAnalyzing, setGlobalAnalyzing] = useState(false);
-  const [analysisMode, setAnalysisMode] = useState("hybrid");
   const [fuInputs, setFuInputs] = useState({});
   const [fuLoading, setFuLoading] = useState({});
   const [toolbarExportLoading, setToolbarExportLoading] = useState("");
@@ -47,27 +48,27 @@ export default function App() {
     setFuInputs(prev => ({ ...prev, [key]: val }));
   }
 
-  async function runNewAnalysis(descInput, requestedMode = analysisMode, origin = null) {
+  async function runNewAnalysis(descInput, origin = null) {
     const desc = String(descInput || "").trim();
     if (!desc || globalAnalyzing) return;
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const initialPhase = requestedMode === "hybrid" ? "analyst_baseline" : "analyst";
+    const initialPhase = "analyst_baseline";
     const blankUC = {
       id, rawInput: desc, status: "analyzing", phase: initialPhase,
       attributes: null, dimScores: null, critique: null, finalScores: null,
       debate: [], followUps: {}, errorMsg: null, discover: null, origin,
       analysisMeta: {
-        analysisMode: requestedMode,
-        liveSearchRequested: requestedMode !== "standard",
+        analysisMode: INTERNAL_ANALYSIS_MODE,
+        liveSearchRequested: true,
         liveSearchUsed: false,
         webSearchCalls: 0,
         liveSearchFallbackReason: null,
-        criticLiveSearchRequested: requestedMode !== "standard",
+        criticLiveSearchRequested: true,
         criticLiveSearchUsed: false,
         criticWebSearchCalls: 0,
         criticLiveSearchFallbackReason: null,
-        discoveryLiveSearchRequested: requestedMode !== "standard",
+        discoveryLiveSearchRequested: true,
         discoveryLiveSearchUsed: false,
         discoveryWebSearchCalls: 0,
         discoveryLiveSearchFallbackReason: null,
@@ -83,7 +84,7 @@ export default function App() {
     setGlobalAnalyzing(true);
 
     try {
-      await runAnalysis(desc, dims, updateUC, id, { analysisMode: requestedMode });
+      await runAnalysis(desc, dims, updateUC, id, { analysisMode: INTERNAL_ANALYSIS_MODE });
     } catch (err) {
       console.error("Analysis error:", err);
       updateUC(id, u => ({ ...u, status: "error", phase: "error", errorMsg: err.message }));
@@ -94,7 +95,7 @@ export default function App() {
   async function startAnalysis() {
     const desc = inputText.trim();
     if (!desc || globalAnalyzing) return;
-    await runNewAnalysis(desc, analysisMode, null);
+    await runNewAnalysis(desc, null);
   }
 
   async function onFollowUp(ucId, dimId, challenge, options = {}) {
@@ -173,14 +174,13 @@ export default function App() {
   async function onAnalyzeRelated(parentUc, candidate) {
     const desc = (candidate?.analysisInput || candidate?.title || "").trim();
     if (!desc || globalAnalyzing) return;
-    const inheritedMode = parentUc?.analysisMeta?.analysisMode || analysisMode;
     const origin = {
       type: "discover",
       fromUseCaseId: parentUc?.id,
       fromUseCaseTitle: parentUc?.attributes?.title || parentUc?.rawInput || "",
       candidateTitle: candidate?.title || "",
     };
-    await runNewAnalysis(desc, inheritedMode, origin);
+    await runNewAnalysis(desc, origin);
   }
 
   async function runToolbarExport(kind, action) {
@@ -443,24 +443,9 @@ export default function App() {
               }}>
               {globalAnalyzing ? <><Spinner size={11} color="#fff" /> Analyzing...</> : "Analyze - 3-phase debate"}
             </button>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ck-muted)" }}>
-              <span>Mode:</span>
-              <select
-                value={analysisMode}
-                onChange={(e) => setAnalysisMode(e.target.value)}
-                style={{
-                  background: "var(--ck-surface-soft)",
-                  border: "1px solid var(--ck-line-strong)",
-                  color: "var(--ck-text)",
-                  borderRadius: 6,
-                  fontSize: 11,
-                  padding: "4px 8px",
-                }}>
-                <option value="standard">Standard (fastest)</option>
-                <option value="live_search">Live search</option>
-                <option value="hybrid">Hybrid reliability</option>
-              </select>
-            </label>
+            <span style={{ fontSize: 11, color: "var(--ck-muted)" }}>
+              Hybrid reliability pipeline runs by default
+            </span>
             <span style={{ fontSize: 11, color: "var(--ck-muted)" }}>Cmd/Ctrl+Enter to submit</span>
             <button
               onClick={() => setShowInputPanel(false)}
@@ -498,7 +483,7 @@ export default function App() {
               </li>
               <li style={{ display: "flex", gap: 8 }}>
                 <span aria-hidden="true">🛡️</span>
-                <span><strong>Critic LLM:</strong> audits Analyst claims and challenges weak scoring; in web-enabled modes it verifies with live search.</span>
+                <span><strong>Critic LLM:</strong> audits Analyst claims with live web checks and challenges weak scoring.</span>
               </li>
               <li style={{ display: "flex", gap: 8 }}>
                 <span aria-hidden="true">🌐</span>
@@ -599,24 +584,6 @@ export default function App() {
                               title={`Suggested from: ${uc.origin?.fromUseCaseTitle || "related analysis"}`}
                               style={{ fontSize: 11, color: "#0f7a55", background: "#ebf8f0", border: "1px solid #b8e8d0", padding: "1px 7px", borderRadius: 4 }}>
                               related
-                            </span>
-                          )}
-                          {uc.analysisMeta?.analysisMode === "hybrid" && (
-                            <span
-                              title={uc.analysisMeta?.hybridStats
-                                ? `Hybrid changed baseline on ${uc.analysisMeta.hybridStats.changedFromBaseline} dimensions`
-                                : "Hybrid reliability mode"}
-                              style={{ fontSize: 11, color: "var(--ck-blue-ink)", background: "var(--ck-blue-soft)", border: "1px solid #c5ceff", padding: "1px 7px", borderRadius: 4 }}>
-                              hybrid
-                            </span>
-                          )}
-                          {uc.analysisMeta?.analysisMode === "live_search" && (
-                            <span
-                              title={uc.analysisMeta?.liveSearchUsed
-                                ? `Live search used (${uc.analysisMeta?.webSearchCalls || 0} calls)`
-                                : "Live search requested, fallback path used"}
-                              style={{ fontSize: 11, color: "var(--ck-blue)", background: "var(--ck-blue-soft)", border: "1px solid #c5ceff", padding: "1px 7px", borderRadius: 4 }}>
-                              live
                             </span>
                           )}
                         </div>
