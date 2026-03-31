@@ -89,12 +89,76 @@ function buildAttributesTemplate(condensed = false) {
   }`;
 }
 
+function extractDimensionSearchKeywords(dim, max = 6) {
+  const source = `${dim?.label || ""} ${dim?.brief || ""} ${dim?.fullDef || ""}`.toLowerCase();
+  const stopWords = new Set([
+    "the", "and", "for", "with", "that", "this", "from", "into", "your", "across",
+    "where", "when", "what", "which", "while", "about", "than", "over", "under",
+    "score", "scores", "dimension", "use", "case", "cases", "does", "into", "also",
+    "must", "should", "would", "could", "have", "has", "had", "been", "being",
+    "there", "their", "them", "they", "across", "within", "without", "only",
+    "more", "less", "very", "high", "medium", "low", "client", "clients", "project",
+    "delivery", "outsourcer", "outsourcing", "enterprise", "business",
+  ]);
+
+  const terms = source
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 4 && !stopWords.has(t));
+
+  const seen = new Set();
+  const unique = [];
+  for (const term of terms) {
+    if (seen.has(term)) continue;
+    seen.add(term);
+    unique.push(term);
+    if (unique.length >= max) break;
+  }
+  return unique;
+}
+
+function extractDimensionSearchIntent(dim) {
+  const lines = String(dim?.fullDef || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const keyLine = lines.find((line) => /^(important|critical|scope|outsourcing|polarity|scoring method)/i.test(line))
+    || lines.find((line) => /^score 5/i.test(line))
+    || lines[0]
+    || "";
+  return clip(keyLine.replace(/\s+/g, " "), 180);
+}
+
+function buildDynamicSearchPlan(dims, topCount = 3) {
+  const targets = [...dims]
+    .sort((a, b) => (Number(b.weight) || 0) - (Number(a.weight) || 0))
+    .slice(0, Math.min(topCount, dims.length));
+
+  return targets.map((dim) => {
+    const keywords = extractDimensionSearchKeywords(dim, 6);
+    const keywordTail = keywords.length ? ` ${keywords.join(" ")}` : "";
+    const queryA = `"[vertical] [use case] ${dim.label} named deployment metrics${keywordTail} 2024 2025"`;
+    const queryB = `"[use case] ${dim.label} independent benchmark case study${keywordTail}"`;
+    return [
+      `- ${dim.label} [${dim.id}] (weight ${dim.weight}%): run at least 1 dedicated query.`,
+      `  - Rubric focus: ${extractDimensionSearchIntent(dim) || dim.brief || "Find evidence directly tied to this dimension rubric."}`,
+      `  - Suggested templates: ${queryA} | ${queryB}`,
+    ].join("\n");
+  }).join("\n");
+}
+
 function buildPhase1EvidencePrompt(desc, dims, { liveSearch = false, condensed = false } = {}) {
+  const mandatorySearchPlan = buildDynamicSearchPlan(dims, 3);
+
   const liveSearchBlock = liveSearch
     ? `\nLIVE SEARCH MODE:
 - Use web search to verify high-confidence claims.
 - Prefer current sources (last 24 months) where possible.
-- Include real URLs for each dimension when available.\n`
+- Include real URLs for each dimension when available.
+- MANDATORY SEARCH DEPTH: before finalizing JSON, run dedicated searches for:
+${mandatorySearchPlan}
+- If a mandatory search returns no reliable evidence, state that explicitly in that dimension's "missingEvidence" field with the query intent.\n`
     : "";
 
   const evidenceTemplate = buildDimEvidenceJsonTemplate(dims, condensed);
@@ -245,10 +309,51 @@ function defaultTargetedQueries(desc, dimLabel, gapHint, attributes = {}) {
   ], 4, 170);
 }
 
-function lowConfidenceDimIds(phase1Payload, dims) {
-  return dims
-    .filter((d) => normalizeConfidenceLevel(phase1Payload?.dimensions?.[d.id]?.confidence) === "low")
-    .map((d) => d.id);
+function hasSpecificMissingEvidenceGap(text) {
+  const gap = String(text || "").trim();
+  if (!gap || gap.length < 22) return false;
+
+  const lower = gap.toLowerCase();
+  const genericOnlyPatterns = [
+    /^more evidence needed[.\s]*$/i,
+    /^additional evidence needed[.\s]*$/i,
+    /^insufficient evidence[.\s]*$/i,
+    /^limited evidence[.\s]*$/i,
+    /^evidence is sparse[.\s]*$/i,
+  ];
+  if (genericOnlyPatterns.some((re) => re.test(gap))) return false;
+
+  const specificityHints = [
+    "case study", "deployment", "benchmark", "earnings", "annual report", "audited",
+    "trial", "peer-reviewed", "vendor", "analyst report", "regulator", "filing",
+    "hospital", "bank", "retailer", "source", "named", "metrics", "pre/post",
+  ];
+  const hasHint = specificityHints.some((k) => lower.includes(k));
+  const hasYear = /\b20\d{2}\b/.test(gap);
+  const hasEntityLikeToken = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/.test(gap);
+
+  return hasHint || hasYear || hasEntityLikeToken;
+}
+
+function selectTargetedCycleDimensions(phase1Payload, dims) {
+  const low = [];
+  const mediumWithSpecificGap = [];
+
+  for (const d of dims) {
+    const dim = phase1Payload?.dimensions?.[d.id] || {};
+    const confidence = normalizeConfidenceLevel(dim?.confidence);
+    const missingEvidence = String(dim?.missingEvidence || "").trim();
+    if (confidence === "low") {
+      low.push(d.id);
+      continue;
+    }
+    if (confidence === "medium" && hasSpecificMissingEvidenceGap(missingEvidence)) {
+      mediumWithSpecificGap.push(d.id);
+    }
+  }
+
+  const candidateIds = [...new Set([...low, ...mediumWithSpecificGap])];
+  return { candidateIds, lowIds: low, mediumGapIds: mediumWithSpecificGap };
 }
 
 function parseWithDiagnostics(rawText, context, debugSession) {
@@ -1174,6 +1279,108 @@ function ensureFinalAnalystSummary(payload, dims) {
   return out;
 }
 
+function confidenceRank(level) {
+  const normalized = normalizeConfidenceLevel(level);
+  if (normalized === "high") return 3;
+  if (normalized === "medium") return 2;
+  if (normalized === "low") return 1;
+  return 0;
+}
+
+function confidenceFromRank(rank, fallback = "medium") {
+  if (rank >= 3) return "high";
+  if (rank >= 2) return "medium";
+  if (rank >= 1) return "low";
+  return fallback;
+}
+
+function isNewSpecificConfidenceGap(gapText, phase1Dim = {}) {
+  const gap = String(gapText || "").trim();
+  if (!hasSpecificMissingEvidenceGap(gap)) return false;
+  const priorGap = [
+    String(phase1Dim?.missingEvidence || "").trim(),
+    String(phase1Dim?.confidenceReason || "").trim(),
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (!priorGap) return true;
+  const normalizedGap = gap.toLowerCase();
+  if (priorGap.includes(normalizedGap)) return false;
+  if (normalizedGap.length > 28 && priorGap.includes(normalizedGap.slice(0, 28))) return false;
+  return true;
+}
+
+function enforcePhase3ConfidenceRules(payload, phase1, phase2, dims) {
+  const out = payload && typeof payload === "object"
+    ? JSON.parse(JSON.stringify(payload))
+    : {};
+  out.dimensions = out.dimensions && typeof out.dimensions === "object" ? out.dimensions : {};
+  const adjustments = [];
+
+  for (const d of dims) {
+    const id = d.id;
+    const initialDim = phase1?.dimensions?.[id] || {};
+    const criticDim = phase2?.dimensions?.[id] || {};
+    out.dimensions[id] = out.dimensions[id] || {};
+    const finalDim = out.dimensions[id];
+
+    const initialScore = clampScore(initialDim?.score, null);
+    const finalScore = clampScore(finalDim?.finalScore, initialScore);
+    const initialConfidence = normalizeConfidenceLevel(initialDim?.confidence) || "medium";
+    let finalConfidence = normalizeConfidenceLevel(finalDim?.confidence) || initialConfidence;
+
+    const defendedScore = Number.isFinite(initialScore) && Number.isFinite(finalScore) && initialScore === finalScore;
+    const criticSuggested = clampScore(criticDim?.suggestedScore, null);
+    const criticAligned = Number.isFinite(criticSuggested) && Number.isFinite(finalScore) && criticSuggested === finalScore;
+    const confidenceGapText = String(
+      finalDim?.newEvidenceGap
+      || finalDim?.confidenceGap
+      || finalDim?.confidenceChangeReason
+      || ""
+    ).trim();
+
+    if (defendedScore) {
+      // Defended dimensions cannot lose confidence; floor is at least medium.
+      const minRank = Math.max(confidenceRank(initialConfidence), confidenceRank("medium"));
+      if (confidenceRank(finalConfidence) < minRank) {
+        const prev = finalConfidence;
+        finalConfidence = confidenceFromRank(minRank, initialConfidence);
+        adjustments.push({
+          dimensionId: id,
+          type: "defense_floor",
+          from: prev,
+          to: finalConfidence,
+          detail: `Score defended (${initialScore}/5); confidence cannot decrease below Phase 1 and medium floor.`,
+        });
+      }
+    } else if (confidenceRank(finalConfidence) < confidenceRank(initialConfidence)) {
+      // Concessions may reduce confidence only with a new specific gap.
+      const hasNewSpecificGap = isNewSpecificConfidenceGap(
+        confidenceGapText || finalDim?.confidenceReason || finalDim?.response || "",
+        initialDim
+      );
+      if (!hasNewSpecificGap) {
+        const prev = finalConfidence;
+        finalConfidence = initialConfidence;
+        adjustments.push({
+          dimensionId: id,
+          type: criticAligned ? "concession_no_new_gap" : "revision_no_new_gap",
+          from: prev,
+          to: finalConfidence,
+          detail: "Confidence drop reverted because no specific new evidence gap was provided.",
+        });
+      }
+    }
+
+    finalDim.confidence = finalConfidence;
+    if (!String(finalDim?.confidenceReason || "").trim()) {
+      finalDim.confidenceReason = defendedScore
+        ? "Confidence remains stable because the score was defended with supporting evidence."
+        : "Confidence reflects available evidence depth after critique.";
+    }
+  }
+
+  return { adjusted: out, adjustments };
+}
+
 function sanitizeEvidenceItem(item) {
   if (!item || typeof item !== "object") return null;
   const point = String(item.point || "").trim();
@@ -1501,9 +1708,12 @@ async function runLowConfidenceExtraCycle({
 }) {
   const current = JSON.parse(JSON.stringify(phase1Payload || {}));
   current.dimensions = current.dimensions || {};
-  const lowIds = lowConfidenceDimIds(current, dims);
+  const selection = selectTargetedCycleDimensions(current, dims);
+  const candidateIds = selection.candidateIds;
 
-  analysisMeta.lowConfidenceInitialCount = lowIds.length;
+  analysisMeta.lowConfidenceInitialCount = candidateIds.length;
+  analysisMeta.lowConfidenceOnlyCount = selection.lowIds.length;
+  analysisMeta.mediumGapTargetedCount = selection.mediumGapIds.length;
   analysisMeta.lowConfidenceUpgradedCount = 0;
   analysisMeta.lowConfidenceValidatedLowCount = 0;
   analysisMeta.lowConfidenceCycleFailures = 0;
@@ -1511,7 +1721,7 @@ async function runLowConfidenceExtraCycle({
   analysisMeta.lowConfidenceTargetedWebSearchCalls = 0;
   analysisMeta.lowConfidenceTargetedFallbackReason = null;
 
-  if (!lowIds.length) {
+  if (!candidateIds.length) {
     appendAnalysisDebugEvent(debugSession, {
       type: "phase_complete",
       phase: "analyst_targeted",
@@ -1530,8 +1740,8 @@ async function runLowConfidenceExtraCycle({
   }));
 
   const attributes = current.attributes || {};
-  for (let idx = 0; idx < lowIds.length; idx += 1) {
-    const dimId = lowIds[idx];
+  for (let idx = 0; idx < candidateIds.length; idx += 1) {
+    const dimId = candidateIds[idx];
     const dim = dims.find((d) => d.id === dimId);
     if (!dim) continue;
 
@@ -1655,7 +1865,7 @@ async function runLowConfidenceExtraCycle({
       const normalized = normalizeLowConfidenceRescore(parsedRescore, dim, before, queryPlan, harvest);
       const nextConfidence = normalizeConfidenceLevel(normalized.confidence) || "low";
       const beforeConfidence = normalizeConfidenceLevel(before?.confidence) || "low";
-      const upgraded = nextConfidence !== "low";
+      const upgraded = confidenceRank(nextConfidence) > confidenceRank(beforeConfidence);
       const usefulQueryCount = (harvest?.queryCoverage || []).filter((q) => q.useful).length;
       const unsuccessfulQueries = (harvest?.queryCoverage || [])
         .filter((q) => !q.useful)
@@ -1700,7 +1910,8 @@ async function runLowConfidenceExtraCycle({
         };
         current.dimensions[dimId] = {
           ...before,
-          confidence: "low",
+          score: normalized.score,
+          confidence: nextConfidence,
           confidenceReason: normalized.confidenceReason,
           missingEvidence: normalized.missingEvidence || before.missingEvidence,
           sources: normalized.sources?.length ? normalized.sources : before.sources,
@@ -1712,7 +1923,7 @@ async function runLowConfidenceExtraCycle({
           lowConfidenceCycle: {
             executed: true,
             confidenceBefore: beforeConfidence,
-            confidenceAfter: "low",
+            confidenceAfter: nextConfidence,
             upgraded: false,
             usefulQueryCount,
             attemptedQueries: queryPlan.queries,
@@ -1720,7 +1931,7 @@ async function runLowConfidenceExtraCycle({
             validatedAt: new Date().toISOString(),
           },
         };
-        analysisMeta.lowConfidenceValidatedLowCount += 1;
+        if (nextConfidence === "low") analysisMeta.lowConfidenceValidatedLowCount += 1;
       }
 
       updateUC(id, (u) => ({
@@ -1745,7 +1956,9 @@ async function runLowConfidenceExtraCycle({
     type: "phase_complete",
     phase: "analyst_targeted",
     attempt: "final",
-    candidateCount: lowIds.length,
+    candidateCount: candidateIds.length,
+    lowCandidates: selection.lowIds.length,
+    mediumGapCandidates: selection.mediumGapIds.length,
     upgradedCount: analysisMeta.lowConfidenceUpgradedCount,
     validatedLowCount: analysisMeta.lowConfidenceValidatedLowCount,
     failures: analysisMeta.lowConfidenceCycleFailures,
@@ -1791,6 +2004,8 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
     discoverCandidatesCount: 0,
     rejectedDiscoverCandidatesCount: 0,
     lowConfidenceInitialCount: 0,
+    lowConfidenceOnlyCount: 0,
+    mediumGapTargetedCount: 0,
     lowConfidenceUpgradedCount: 0,
     lowConfidenceValidatedLowCount: 0,
     lowConfidenceCycleFailures: 0,
