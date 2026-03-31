@@ -1308,6 +1308,132 @@ function isNewSpecificConfidenceGap(gapText, phase1Dim = {}) {
   return true;
 }
 
+function normalizePhase3Decision(rawValue, initialScore, finalScore) {
+  const raw = String(rawValue || "").trim().toLowerCase();
+  if (!raw) {
+    if (Number.isFinite(initialScore) && Number.isFinite(finalScore) && finalScore === initialScore) return "defend";
+    if (Number.isFinite(initialScore) && Number.isFinite(finalScore) && finalScore !== initialScore) return "concede";
+    return "defend";
+  }
+  if (["defend", "keep", "maintain", "uphold", "hold"].includes(raw)) return "defend";
+  if (["concede", "revise", "change", "adjust"].includes(raw)) return "concede";
+  if (raw.includes("defend") || raw.includes("keep")) return "defend";
+  if (raw.includes("concede") || raw.includes("revise") || raw.includes("adjust")) return "concede";
+  return Number.isFinite(initialScore) && Number.isFinite(finalScore) && finalScore !== initialScore
+    ? "concede"
+    : "defend";
+}
+
+function hasSpecificRevisionReason(text, phase1Dim = {}, criticDim = {}) {
+  const reason = String(text || "").trim();
+  if (reason.length < 24) return false;
+  if (hasSpecificMissingEvidenceGap(reason)) return true;
+
+  const lower = reason.toLowerCase();
+  const signalWords = [
+    "evidence", "source", "deployment", "benchmark", "metric", "audited", "study",
+    "outcome", "regulator", "compliance", "baseline", "counterfactual", "variance",
+  ];
+  const hasSignalWord = signalWords.some((w) => lower.includes(w));
+  const hasNumericSignal = /\b20\d{2}\b/.test(reason) || /\b\d+(?:\.\d+)?%?\b/.test(reason);
+  const hasEntityLikeToken = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/.test(reason);
+  const priorContext = [
+    String(phase1Dim?.confidenceReason || ""),
+    String(phase1Dim?.missingEvidence || ""),
+    String(criticDim?.critique || ""),
+  ].join(" ").toLowerCase();
+  const nonTrivial = reason.length >= 48 || (hasNumericSignal && hasSignalWord);
+  if (!nonTrivial) return false;
+  if (!(hasSignalWord || hasNumericSignal || hasEntityLikeToken)) return false;
+  if (priorContext && priorContext.includes(reason.toLowerCase()) && reason.length < 64) return false;
+  return true;
+}
+
+function inferRevisionBasis(rawBasis, reasonText) {
+  const basis = String(rawBasis || "").trim().toLowerCase();
+  const allowed = new Set(["new_evidence", "evidence_gap", "rubric_alignment", "rubric_misalignment", "none"]);
+  if (allowed.has(basis)) return basis;
+  const lower = String(reasonText || "").toLowerCase();
+  if (/(missing|gap|sparse|insufficient|uncertain)/.test(lower)) return "evidence_gap";
+  if (/(rubric|threshold|criteria|calibration|anchor)/.test(lower)) return "rubric_alignment";
+  if (/(new|updated|latest|fresh|recent|audit|benchmark)/.test(lower)) return "new_evidence";
+  return "none";
+}
+
+function enforcePhase3DecisionRules(payload, phase1, phase2, dims) {
+  const out = payload && typeof payload === "object"
+    ? JSON.parse(JSON.stringify(payload))
+    : {};
+  out.dimensions = out.dimensions && typeof out.dimensions === "object" ? out.dimensions : {};
+  const adjustments = [];
+
+  for (const d of dims) {
+    const id = d.id;
+    out.dimensions[id] = out.dimensions[id] || {};
+    const finalDim = out.dimensions[id];
+    const initialDim = phase1?.dimensions?.[id] || {};
+    const criticDim = phase2?.dimensions?.[id] || {};
+
+    const initialScore = clampScore(initialDim?.score, null);
+    const criticSuggested = clampScore(criticDim?.suggestedScore, null);
+    let finalScore = clampScore(finalDim?.finalScore, initialScore);
+    const hasExplicitDecision = Boolean(
+      String(finalDim?.decision || "").trim() || String(finalDim?.stance || "").trim()
+    );
+    const decision = normalizePhase3Decision(finalDim?.decision || finalDim?.stance, initialScore, finalScore);
+    const changed = Number.isFinite(initialScore) && Number.isFinite(finalScore) && finalScore !== initialScore;
+    const revisionReason = String(
+      finalDim?.revisionJustification
+      || finalDim?.scoreChangeReason
+      || finalDim?.confidenceGap
+      || finalDim?.response
+      || ""
+    ).trim();
+    const revisionBasis = inferRevisionBasis(finalDim?.revisionBasis, revisionReason);
+    const hasSpecificReason = hasSpecificRevisionReason(revisionReason, initialDim, criticDim);
+
+    if (changed) {
+      if (!hasExplicitDecision || decision !== "concede" || !hasSpecificReason || revisionBasis === "none") {
+        const from = finalScore;
+        finalScore = initialScore;
+        finalDim.finalScore = initialScore;
+        finalDim.scoreChanged = false;
+        finalDim.decision = "defend";
+        finalDim.revisionBasis = "none";
+        finalDim.revisionJustification = "Score unchanged because concession lacked specific evidence-backed rationale.";
+        adjustments.push({
+          dimensionId: id,
+          type: "revert_unsupported_concession",
+          from,
+          to: initialScore,
+          detail: "Score change reverted: explicit concession + specific rationale required.",
+        });
+      } else {
+        finalDim.scoreChanged = true;
+        finalDim.decision = "concede";
+        finalDim.revisionBasis = revisionBasis;
+        if (!String(finalDim?.revisionJustification || "").trim()) {
+          finalDim.revisionJustification = clip(revisionReason, 180);
+        }
+      }
+    } else {
+      finalDim.finalScore = initialScore ?? finalScore;
+      finalDim.scoreChanged = false;
+      finalDim.decision = "defend";
+      finalDim.revisionBasis = "none";
+      finalDim.revisionJustification = "";
+    }
+
+    if (Number.isFinite(criticSuggested) && Number.isFinite(finalDim?.finalScore) && finalDim.finalScore === criticSuggested) {
+      finalDim.criticAligned = true;
+    } else {
+      finalDim.criticAligned = false;
+    }
+  }
+
+  return { adjusted: out, adjustments };
+}
+
 function enforcePhase3ConfidenceRules(payload, phase1, phase2, dims) {
   const out = payload && typeof payload === "object"
     ? JSON.parse(JSON.stringify(payload))
@@ -2012,6 +2138,8 @@ export async function runAnalysis(desc, dims, updateUC, id, options = {}) {
     lowConfidenceTargetedSearchUsed: false,
     lowConfidenceTargetedWebSearchCalls: 0,
     lowConfidenceTargetedFallbackReason: null,
+    phase3DecisionGuardAdjustments: 0,
+    phase3ConfidenceGuardAdjustments: 0,
     hybridStats: null,
   };
 
@@ -2152,6 +2280,8 @@ STRICT JSON RULES:
 
 Your original scores and confidence:
 ${dims.map((d) => `- ${d.label}: ${p1.dimensions?.[d.id]?.score}/5 (${p1.dimensions?.[d.id]?.confidence || "n/a"} confidence)`).join("\n")}
+Phase 1 confidence anchors:
+${dims.map((d) => `- ${d.id}=${p1.dimensions?.[d.id]?.confidence || "n/a"}`).join("\n")}
 
 Critic's overall feedback: ${p2.overallFeedback || ""}
 
@@ -2165,6 +2295,11 @@ ${dims.map((d) => {
 }).join("\n")}
 
 Respond per dimension: defend your score with NEW evidence not previously cited, OR concede and revise with clear reasoning.
+Mandatory decision rules:
+- Set "decision" to exactly "defend" or "concede" for each dimension.
+- If decision is "defend": keep finalScore equal to original score for that dimension.
+- If decision is "concede": include a specific "revisionBasis" and "revisionJustification".
+- Do not auto-match critic suggestions. Keep original score unless concession is clearly justified by specific evidence.
 Also provide a neutral plain-language brief for each dimension:
 - Write 2-3 short sentences.
 - Explain why the score is at this level (why it is not lower).
@@ -2176,6 +2311,9 @@ Set confidence for every dimension:
 - High: named deployments with verifiable metrics and strong market familiarity.
 - Medium: deployments exist but evidence is sparse, self-reported, or moving fast.
 - Low: fewer than two verifiable deployments, underrepresented vertical, or heavy extrapolation.
+Confidence revision constraints:
+- If decision is "defend", confidence cannot decrease vs Phase 1 and cannot be below medium.
+- If decision is "concede", confidence may decrease only if "confidenceGap" states a specific new evidence gap.
 Do NOT mention the critic or use first-person phrasing.
 
 Return ONLY this JSON:
@@ -2186,6 +2324,10 @@ Return ONLY this JSON:
     ${dims.map((d) => `"${d.id}": {
       "finalScore": <your final score 1-5 - may differ from original>,
       "scoreChanged": <true if you revised the score>,
+      "decision": "<defend|concede>",
+      "revisionBasis": "<none|new_evidence|evidence_gap|rubric_alignment|rubric_misalignment>",
+      "revisionJustification": "<required if score changes; one concrete sentence>",
+      "confidenceGap": "<required only if confidence decreases; else empty string>",
       "confidence": "<high|medium|low>",
       "confidenceReason": "<1 sentence explaining confidence level>",
       "brief": "<2-3 plain-language sentences, max 65 words, explain why this score is deserved and what prevents a higher score>",
@@ -2247,6 +2389,9 @@ STRICT JSON RULES:
 - Keep each dimension "confidenceReason" <= 24 words.
 - Keep each dimension "brief" <= 65 words, 2-3 plain-language sentences, and explain why score is not lower and not higher.
 - Do not use the literal phrasing "Above 0 because" / "Below 5 because".
+- Set each dimension "decision" to "defend" or "concede".
+- If a score changes, include "revisionBasis" (not "none") and a specific "revisionJustification".
+- If confidence decreases, include specific "confidenceGap"; otherwise keep it empty.
 - Keep each dimension "response" <= 45 words.
 - Keep each dimension "arguments.supporting" and "arguments.limiting" to 2-3 items each.
 - Keep each argument claim concise (<16 words) and detail concise (<28 words).
@@ -2271,6 +2416,25 @@ STRICT JSON RULES:
       }, debugSession), dims), dims), dims);
     }
 
+    {
+      const decisionPass = enforcePhase3DecisionRules(p3, p1, p2, dims);
+      analysisMeta.phase3DecisionGuardAdjustments += decisionPass.adjustments.length;
+      const confidencePass = enforcePhase3ConfidenceRules(decisionPass.adjusted, p1, p2, dims);
+      analysisMeta.phase3ConfidenceGuardAdjustments += confidencePass.adjustments.length;
+      p3 = ensureFinalAnalystSummary(ensureDimensionArguments(ensureDimensionConfidence(confidencePass.adjusted, dims), dims), dims);
+      appendAnalysisDebugEvent(debugSession, {
+        type: "phase3_guard_applied",
+        phase: "finalizing",
+        attempt: "post_parse",
+        decisionAdjustments: decisionPass.adjustments.length,
+        confidenceAdjustments: confidencePass.adjustments.length,
+        details: {
+          decision: decisionPass.adjustments,
+          confidence: confidencePass.adjustments,
+        },
+      });
+    }
+
     let finalResponse = p3;
     try {
       const consistencyPrompt = buildConsistencyCheckPrompt(desc, dims, p1, p2, p3);
@@ -2292,13 +2456,19 @@ STRICT JSON RULES:
         prompt: consistencyPrompt,
       }, debugSession);
       const { adjusted, changed } = applyConsistencyAdjustments(p3, audit, dims);
-      finalResponse = ensureFinalAnalystSummary(ensureDimensionArguments(ensureDimensionConfidence(adjusted, dims), dims), dims);
+      const decisionPass = enforcePhase3DecisionRules(adjusted, p1, p2, dims);
+      analysisMeta.phase3DecisionGuardAdjustments += decisionPass.adjustments.length;
+      const confidencePass = enforcePhase3ConfidenceRules(decisionPass.adjusted, p1, p2, dims);
+      analysisMeta.phase3ConfidenceGuardAdjustments += confidencePass.adjustments.length;
+      finalResponse = ensureFinalAnalystSummary(ensureDimensionArguments(ensureDimensionConfidence(confidencePass.adjusted, dims), dims), dims);
       appendAnalysisDebugEvent(debugSession, {
         type: "consistency_check_applied",
         phase: "finalizing_consistency",
         attempt: "final",
         changedCount: changed.length,
         changed,
+        decisionGuardAdjustments: decisionPass.adjustments.length,
+        confidenceGuardAdjustments: confidencePass.adjustments.length,
       });
     } catch (consistencyErr) {
       appendAnalysisDebugEvent(debugSession, {
