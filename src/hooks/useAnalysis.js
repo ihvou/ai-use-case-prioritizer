@@ -54,7 +54,7 @@ function buildDimJsonTemplate(dims, condensed = false) {
 function buildDimEvidenceJsonTemplate(dims, condensed = false) {
   if (condensed) {
     return dims.map((d) =>
-      `"${d.id}": {"evidence": [{"point": "<max 16 words>", "relevance": "<max 10 words>", "source": {"name": "...", "quote": "<max 12 words>", "url": "..."}}], "missingEvidence": "<max 20 words>"}`
+      `"${d.id}": {"evidence": [{"point": "<max 16 words>", "relevance": "<max 10 words>", "source": {"name": "...", "quote": "<max 12 words>", "url": "...", "sourceType": "<vendor|press|independent>"}}], "missingEvidence": "<max 20 words>"}`
     ).join(",\n    ");
   }
 
@@ -64,7 +64,7 @@ function buildDimEvidenceJsonTemplate(dims, condensed = false) {
         {
           "point": "<discrete verifiable fact or market signal>",
           "relevance": "<why this matters for this dimension>",
-          "source": {"name": "<source name>", "quote": "<paraphrased insight, max 15 words>", "url": "<real URL if known>"}
+          "source": {"name": "<source name>", "quote": "<paraphrased insight, max 15 words>", "url": "<real URL if known>", "sourceType": "<vendor|press|independent>"}
         }
       ],
       "missingEvidence": "<what key evidence is still missing for strong confidence>"
@@ -180,6 +180,11 @@ Rules for this step:
 - Enumerate evidence only: verifiable facts, deployments, metrics, market signals, and caveats.
 - Do NOT assign scores, confidence levels, or narrative conclusions.
 - Keep evidence discrete (bullet-like facts), not long prose.
+- Source credibility is mandatory per evidence point:
+  - sourceType "vendor": vendor blog, product page, self-reported marketing claim.
+  - sourceType "press": major press, earnings call, regulatory filing.
+  - sourceType "independent": peer-reviewed, benchmark, audit, neutral analyst research.
+- If a dimension relies mostly on vendor claims, state that clearly in "missingEvidence" and request independent corroboration.
 
 Return ONLY this JSON structure, fully populated for ALL 11 dimension IDs (${dims.map((d) => d.id).join(", ")}):
 
@@ -282,6 +287,33 @@ function mergeSourceLists(...lists) {
   return out.slice(0, 16);
 }
 
+function normalizedSourceName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function countNewNamedSources(currentList = [], baselineList = []) {
+  const baseline = new Set(
+    (Array.isArray(baselineList) ? baselineList : [])
+      .map((s) => normalizedSourceName(s?.name))
+      .filter(Boolean)
+  );
+  const current = new Set(
+    (Array.isArray(currentList) ? currentList : [])
+      .map((s) => normalizedSourceName(s?.name))
+      .filter(Boolean)
+  );
+  let count = 0;
+  current.forEach((name) => {
+    if (!baseline.has(name)) count += 1;
+  });
+  return count;
+}
+
 function normalizeStringList(values, maxItems = 6, maxLen = 180) {
   if (!Array.isArray(values)) return [];
   return values
@@ -289,6 +321,16 @@ function normalizeStringList(values, maxItems = 6, maxLen = 180) {
     .filter(Boolean)
     .slice(0, maxItems)
     .map((v) => v.slice(0, maxLen));
+}
+
+function normalizeEvidenceSourceType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (["vendor", "press", "independent"].includes(raw)) return raw;
+  if (raw.includes("vendor") || raw.includes("marketing") || raw.includes("product")) return "vendor";
+  if (raw.includes("press") || raw.includes("news") || raw.includes("earnings") || raw.includes("filing")) return "press";
+  if (raw.includes("independent") || raw.includes("peer") || raw.includes("audit") || raw.includes("benchmark")) return "independent";
+  return "";
 }
 
 function defaultTargetedQueries(desc, dimLabel, gapHint, attributes = {}) {
@@ -397,12 +439,14 @@ function buildHybridReconcileEvidencePrompt(desc, dims, baseline, web, condensed
       `BASELINE score: ${b.score ?? "n/a"}/5`,
       `BASELINE confidence: ${b.confidence || "n/a"}`,
       `BASELINE confidence reason: "${clip(b.confidenceReason, 150)}"`,
+      `BASELINE missing evidence: "${clip(b.missingEvidence, 160)}"`,
       `BASELINE brief: "${clip(b.brief, 180)}"`,
       `BASELINE sources: ${sourceSummary(b.sources)}`,
       `BASELINE full snapshot: "${clip(b.full, 320)}"`,
       `WEB score: ${w.score ?? "n/a"}/5`,
       `WEB confidence: ${w.confidence || "n/a"}`,
       `WEB confidence reason: "${clip(w.confidenceReason, 150)}"`,
+      `WEB missing evidence: "${clip(w.missingEvidence, 160)}"`,
       `WEB brief: "${clip(w.brief, 180)}"`,
       `WEB sources: ${sourceSummary(w.sources)}`,
       `WEB full snapshot: "${clip(w.full, 320)}"`,
@@ -430,6 +474,9 @@ ${comparison}
 Rules:
 - Prefer points backed by strong, verifiable evidence.
 - Do not overreact to weak web snippets.
+- When confidence differs between drafts, prefer evidence from the higher-confidence draft.
+- When both drafts flag the same missing evidence, preserve that gap.
+- When one draft fills a gap that the other flags, include the gap-filling evidence.
 - Enumerate evidence only. Do NOT output scores or confidence in this step.
 - Keep the same outsourcing-delivery framing and coherent attributes.
 
@@ -449,8 +496,8 @@ function buildCriticPrompt(desc, dims, p1, { liveSearch = false } = {}) {
       `DIMENSION: ${d.label} [${d.id}]`,
       `Analyst score: ${dim.score ?? "n/a"}/5`,
       `Analyst confidence: ${dim.confidence || "n/a"}`,
-      `Analyst brief: "${clip(dim.brief, 190)}"`,
-      `Analyst full snapshot: "${clip(dim.full, 320)}"`,
+      `Analyst brief: "${clip(dim.brief, 260)}"`,
+      `Analyst full snapshot: "${clip(dim.full, 800)}"`,
       `Analyst cited sources: ${sourceSummary(dim.sources)}`,
     ].join("\n");
   }).join("\n\n");
@@ -631,8 +678,8 @@ function normalizeLowConfidenceSearchHarvest(payload, queryPlan) {
 
   const fallbackCoverage = (queryPlan?.queries || []).map((q) => ({
     query: q,
-    useful: findings.some((f) => !f.query || f.query === q),
-    note: findings.some((f) => !f.query || f.query === q) ? "Returned at least one useful fact." : "No clearly useful fact captured.",
+    useful: findings.some((f) => f.query && f.query === q),
+    note: findings.some((f) => f.query && f.query === q) ? "Returned at least one useful fact." : "No clearly useful fact captured.",
   }));
 
   return {
@@ -1199,16 +1246,26 @@ function applyConsistencyAdjustments(p3, audit, dims) {
     const proposed = Number(audit?.dimensions?.[d.id]?.adjustedScore);
     if (!Number.isFinite(proposed)) return;
     const adj = Math.max(1, Math.min(5, Math.round(proposed)));
+    const auditReason = String(
+      audit?.dimensions?.[d.id]?.reason
+      || "Adjusted for rubric consistency after cross-phase audit."
+    ).trim();
     if (!Number.isFinite(current)) {
       out.dimensions[d.id] = out.dimensions[d.id] || {};
       out.dimensions[d.id].finalScore = adj;
       out.dimensions[d.id].scoreChanged = true;
+      out.dimensions[d.id].decision = "concede";
+      out.dimensions[d.id].revisionBasis = "rubric_alignment";
+      out.dimensions[d.id].revisionJustification = auditReason;
       changed.push({ id: d.id, from: null, to: adj });
       return;
     }
     if (current !== adj) {
       out.dimensions[d.id].finalScore = adj;
       out.dimensions[d.id].scoreChanged = true;
+      out.dimensions[d.id].decision = "concede";
+      out.dimensions[d.id].revisionBasis = "rubric_alignment";
+      out.dimensions[d.id].revisionJustification = auditReason;
       changed.push({ id: d.id, from: current, to: adj });
     }
   });
@@ -1422,6 +1479,19 @@ function enforcePhase3DecisionRules(payload, phase1, phase2, dims) {
       finalDim.decision = "defend";
       finalDim.revisionBasis = "none";
       finalDim.revisionJustification = "";
+      const newNamedSourceCount = countNewNamedSources(finalDim?.sources, initialDim?.sources);
+      if (newNamedSourceCount === 0) {
+        if (!String(finalDim?.confidenceGap || "").trim()) {
+          finalDim.confidenceGap = "No new named source beyond Phase 1 evidence.";
+        }
+        adjustments.push({
+          dimensionId: id,
+          type: "defense_without_new_source",
+          from: initialScore,
+          to: initialScore,
+          detail: "Defense reused prior sources; confidence should be capped unless a new named source is added.",
+        });
+      }
     }
 
     if (Number.isFinite(criticSuggested) && Number.isFinite(finalDim?.finalScore) && finalDim.finalScore === criticSuggested) {
@@ -1464,18 +1534,40 @@ function enforcePhase3ConfidenceRules(payload, phase1, phase2, dims) {
     ).trim();
 
     if (defendedScore) {
+      const newNamedSourceCount = countNewNamedSources(finalDim?.sources, initialDim?.sources);
+      if (newNamedSourceCount === 0) {
+        const targetRank = initialConfidence === "high"
+          ? confidenceRank("medium")
+          : confidenceRank("low");
+        if (confidenceRank(finalConfidence) > targetRank) {
+          const prev = finalConfidence;
+          finalConfidence = confidenceFromRank(targetRank, "medium");
+          adjustments.push({
+            dimensionId: id,
+            type: "defense_no_new_source_confidence_cap",
+            from: prev,
+            to: finalConfidence,
+            detail: "Defended score kept without new named source; confidence capped until fresh evidence is cited.",
+          });
+        }
+        if (!String(finalDim?.confidenceGap || "").trim()) {
+          finalDim.confidenceGap = "No new named source beyond Phase 1 evidence.";
+        }
+      }
       // Defended dimensions cannot lose confidence; floor is at least medium.
-      const minRank = Math.max(confidenceRank(initialConfidence), confidenceRank("medium"));
-      if (confidenceRank(finalConfidence) < minRank) {
-        const prev = finalConfidence;
-        finalConfidence = confidenceFromRank(minRank, initialConfidence);
-        adjustments.push({
-          dimensionId: id,
-          type: "defense_floor",
-          from: prev,
-          to: finalConfidence,
-          detail: `Score defended (${initialScore}/5); confidence cannot decrease below Phase 1 and medium floor.`,
-        });
+      if (newNamedSourceCount > 0) {
+        const minRank = Math.max(confidenceRank(initialConfidence), confidenceRank("medium"));
+        if (confidenceRank(finalConfidence) < minRank) {
+          const prev = finalConfidence;
+          finalConfidence = confidenceFromRank(minRank, initialConfidence);
+          adjustments.push({
+            dimensionId: id,
+            type: "defense_floor",
+            from: prev,
+            to: finalConfidence,
+            detail: `Score defended (${initialScore}/5); confidence cannot decrease below Phase 1 and medium floor.`,
+          });
+        }
       }
     } else if (confidenceRank(finalConfidence) < confidenceRank(initialConfidence)) {
       // Concessions may reduce confidence only with a new specific gap.
@@ -1516,6 +1608,7 @@ function sanitizeEvidenceItem(item) {
         name: String(item.source.name || "").trim(),
         quote: String(item.source.quote || "").trim(),
         url: String(item.source.url || "").trim(),
+        sourceType: normalizeEvidenceSourceType(item.source.sourceType),
       }
     : null;
   return {
@@ -2298,6 +2391,8 @@ Respond per dimension: defend your score with NEW evidence not previously cited,
 Mandatory decision rules:
 - Set "decision" to exactly "defend" or "concede" for each dimension.
 - If decision is "defend": keep finalScore equal to original score for that dimension.
+- If decision is "defend": cite at least ONE new named source not cited in Phase 1.
+- If defending without a new named source, lower confidence (high->medium, medium->low) and state what evidence is missing.
 - If decision is "concede": include a specific "revisionBasis" and "revisionJustification".
 - Do not auto-match critic suggestions. Keep original score unless concession is clearly justified by specific evidence.
 Also provide a neutral plain-language brief for each dimension:
@@ -2356,12 +2451,20 @@ Return ONLY this JSON:
   "conclusion": "<2-3 sentence strategic recommendation: should the outsourcing company pursue this, and how?>"
 }`;
 
-    let r3 = await callAnalystAPI([{ role: "user", content: phase3Prompt }], SYS_ANALYST_RESPONSE, 6000);
+    const phase3Res = await callAnalystAPI(
+      [{ role: "user", content: phase3Prompt }],
+      SYS_ANALYST_RESPONSE,
+      6000,
+      { liveSearch: true, includeMeta: true }
+    );
+    absorbAnalystMeta(analysisMeta, phase3Res.meta);
+    let r3 = phase3Res.text;
     appendAnalysisDebugEvent(debugSession, {
       type: "model_response",
       phase: "finalizing",
       attempt: "full",
       responseLength: r3?.length || 0,
+      meta: phase3Res.meta || null,
       prompt: shortText(phase3Prompt, 30000),
       responseExcerpt: shortText(r3, 6000),
       response: shortText(r3, 100000),
@@ -2390,6 +2493,7 @@ STRICT JSON RULES:
 - Keep each dimension "brief" <= 65 words, 2-3 plain-language sentences, and explain why score is not lower and not higher.
 - Do not use the literal phrasing "Above 0 because" / "Below 5 because".
 - Set each dimension "decision" to "defend" or "concede".
+- If decision is "defend", include at least one new named source not cited in Phase 1.
 - If a score changes, include "revisionBasis" (not "none") and a specific "revisionJustification".
 - If confidence decreases, include specific "confidenceGap"; otherwise keep it empty.
 - Keep each dimension "response" <= 45 words.
@@ -2397,12 +2501,20 @@ STRICT JSON RULES:
 - Keep each argument claim concise (<16 words) and detail concise (<28 words).
 - Keep "conclusion" <= 50 words.
 `;
-      r3 = await callAnalystAPI([{ role: "user", content: phase3RetryPrompt }], SYS_ANALYST_RESPONSE, 4200);
+      const phase3RetryRes = await callAnalystAPI(
+        [{ role: "user", content: phase3RetryPrompt }],
+        SYS_ANALYST_RESPONSE,
+        4200,
+        { liveSearch: true, includeMeta: true }
+      );
+      absorbAnalystMeta(analysisMeta, phase3RetryRes.meta);
+      r3 = phase3RetryRes.text;
       appendAnalysisDebugEvent(debugSession, {
         type: "model_response",
         phase: "finalizing",
         attempt: "condensed_retry",
         responseLength: r3?.length || 0,
+        meta: phase3RetryRes.meta || null,
         prompt: shortText(phase3RetryPrompt, 30000),
         responseExcerpt: shortText(r3, 6000),
         response: shortText(r3, 100000),
@@ -2438,12 +2550,20 @@ STRICT JSON RULES:
     let finalResponse = p3;
     try {
       const consistencyPrompt = buildConsistencyCheckPrompt(desc, dims, p1, p2, p3);
-      const r4 = await callAnalystAPI([{ role: "user", content: consistencyPrompt }], SYS_ANALYST_RESPONSE, 3000);
+      const consistencyRes = await callAnalystAPI(
+        [{ role: "user", content: consistencyPrompt }],
+        SYS_ANALYST_RESPONSE,
+        3000,
+        { liveSearch: true, includeMeta: true }
+      );
+      absorbAnalystMeta(analysisMeta, consistencyRes.meta);
+      const r4 = consistencyRes.text;
       appendAnalysisDebugEvent(debugSession, {
         type: "model_response",
         phase: "finalizing_consistency",
         attempt: "full",
         responseLength: r4?.length || 0,
+        meta: consistencyRes.meta || null,
         prompt: shortText(consistencyPrompt, 30000),
         responseExcerpt: shortText(r4, 6000),
         response: shortText(r4, 100000),
