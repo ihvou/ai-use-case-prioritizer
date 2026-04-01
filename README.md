@@ -22,11 +22,96 @@ After completion, PM can:
 - run full analysis for a discovered candidate via **Analyse ->**,
 - export portfolio or single-use-case reports.
 
-## Analysis Modes
+## Analysis Pipeline (Fixed)
 
-- `standard` (fastest): memory-based analysis, no live web for Analyst/Critic/Discover.
-- `live_search`: Analyst + Critic + Discover attempt live web search with fallback.
-- `hybrid` (default): baseline Analyst pass + web Analyst pass + reconcile, then Critic and Discover in web-enabled mode.
+The app now runs a single quality-first pipeline. There is no user-facing mode selector.
+
+Every analysis run executes:
+1. Analyst baseline pass (memory-only): evidence enumeration then scoring
+2. Analyst web pass (live-search assisted): evidence enumeration then scoring
+3. Hybrid reconcile pass: merge baseline + web evidence, then re-score
+4. Targeted confidence cycle for weak dimensions:
+   - Triggered for `low` confidence dimensions
+   - Also triggered for `medium` confidence dimensions when `missingEvidence` is specific
+5. Critic web audit pass
+6. Analyst final response pass
+7. Final consistency check pass
+8. Discover generation + candidate pre-validation
+
+Live web is attempted where applicable and can fallback to non-web completion when the tool path fails; fallback reasons are captured in debug logs.
+
+## Prompt Structure and JSON Contracts
+
+Prompting is role-based and schema-driven:
+- System prompts live in `src/prompts/system.js`:
+  - `SYS_ANALYST`
+  - `SYS_CRITIC`
+  - `SYS_ANALYST_RESPONSE`
+  - `SYS_FOLLOWUP`
+- Each call expects JSON-only output with explicit schema templates to reduce malformed responses.
+
+Per-phase prompt design:
+- Phase 1 Step 1 (evidence enumeration):
+  - Enumerates evidence only (no scores)
+  - Requires source typing (`vendor|press|independent`)
+  - Adds dynamic mandatory search depth for top-weighted dimensions (computed from current dimension weights, not hard-coded IDs)
+- Phase 1 Step 2 (scoring from evidence):
+  - Scores strictly from Step 1 evidence payload
+  - Forbids adding new facts during scoring
+  - Requires confidence level + reason per dimension
+- Phase 2 Critic:
+  - Audits analyst claims and suggested scores
+  - Mandate is adversarial verification, not full re-research from scratch
+- Phase 3 Analyst response:
+  - Requires `decision: defend|concede` for each dimension
+  - Applies explicit confidence revision constraints
+  - Then a separate consistency-check pass can adjust final scores
+- Follow-up thread:
+  - First classifies intent (`challenge|question|reframe|add_evidence|note|re_search`)
+  - Then runs intent-specific prompt logic
+  - Score changes are proposals that PM explicitly accepts or dismisses
+
+## Model Request Profile (Approximate)
+
+### Models
+- Analyst route (`api/analyst.js`): OpenAI `gpt-5.4-mini`
+- Critic route (`api/critic.js`): OpenAI `gpt-5.4`
+- Live-search calls use Responses API tools (`web_search` / `web_search_preview`) with fallback to non-tool completion.
+
+### Analysis run request pattern
+
+Core run (all 11 dimensions are batch-processed, not one call per dimension):
+
+| Stage | Route / model | Typical calls | Notes |
+|---|---|---:|---|
+| Baseline analyst pass | Analyst / `gpt-5.4-mini` | 2 | Evidence + scoring |
+| Web analyst pass | Analyst / `gpt-5.4-mini` | 2 | Evidence (live web) + scoring |
+| Reconcile analyst pass | Analyst / `gpt-5.4-mini` | 2 | Reconcile evidence + scoring |
+| Targeted confidence cycle | Analyst / `gpt-5.4-mini` | +3 per targeted dimension | Query plan + targeted live search + re-score |
+| Critic audit | Critic / `gpt-5.4` | 1 | +1 retry on parse failure |
+| Analyst response | Analyst / `gpt-5.4-mini` | 1 | +up to 2 retries on parse failure |
+| Consistency check | Analyst / `gpt-5.4-mini` | 1 | Post-response score audit |
+| Discover generation | Analyst / `gpt-5.4-mini` | 1 | +1 retry on parse failure |
+| Discover validation | Analyst / `gpt-5.4-mini` | +1 per candidate | Up to 5 candidates |
+
+No-retry formula:
+- `total_calls ~= 10 + (3 * targeted_dimensions) + validated_candidates`
+
+Examples:
+- Low-variance run (`targeted_dimensions=0`, `validated_candidates=3`): about `13` model calls
+- Typical run (`targeted_dimensions=2`, `validated_candidates=4`): about `20` model calls
+- Deep run (`targeted_dimensions=4`, `validated_candidates=5`): about `27` model calls
+
+Retry behavior can add extra calls when strict JSON repair retries are needed.
+
+### Follow-up request pattern (per PM message)
+
+- Intent classification: `1` analyst call
+- Intent execution:
+  - `note`: `0` extra model calls
+  - `question|reframe|challenge`: `+1` analyst call
+  - `add_evidence`: `+1` analyst call (+ up to 3 source-fetch HTTP calls to `/api/fetch-source`)
+  - `re_search`: `+1` analyst live-search call
 
 ## Scoring Model
 
@@ -154,5 +239,5 @@ OPENAI_API_KEY=sk-...
 - No local/session persistence yet.
 - Long LLM JSON outputs can still require retry/repair.
 - Live web paths may fallback to non-web mode when tool route is unavailable.
-- Hybrid mode is slower and more expensive than standard mode.
+- Quality-first pipeline can be costlier/slower on runs with many targeted-dimension cycles and discovery validations.
 - PDF output depends on browser print behavior.
