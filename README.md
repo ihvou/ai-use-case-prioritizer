@@ -218,33 +218,13 @@ Create `.env.local`:
 
 ```bash
 OPENAI_API_KEY=sk-...
-AUTH_TOKEN_SECRET=replace-with-long-random-secret
-AUTH_ALLOWED_DOMAIN=ciklum.com
-RESEND_API_KEY=re_...
-AUTH_EMAIL_FROM="AI Use Case Researcher <no-reply@your-domain.com>"
 ```
-
-### Access Control (Email OTP)
-
-- App access is protected by email OTP.
-- Only emails under the configured `AUTH_ALLOWED_DOMAIN` are accepted (defaults to `ciklum.com`, i.e. `@ciklum.com`).
-- OTP/session flow is implemented via serverless routes:
-  - `POST /api/auth/request-otp`
-  - `POST /api/auth/verify-otp`
-  - `GET /api/auth/session`
-  - `POST /api/auth/logout`
-- Protected API routes (`/api/analyst`, `/api/critic`, `/api/fetch-source`) require a valid auth cookie.
 
 ## Deploy (Vercel)
 
 1. Push to GitHub
 2. Import repo into Vercel
-3. Add required env vars in Project Settings -> Environment Variables:
-   - `OPENAI_API_KEY`
-   - `AUTH_TOKEN_SECRET`
-   - `RESEND_API_KEY`
-   - `AUTH_EMAIL_FROM`
-   - Optional: `AUTH_ALLOWED_DOMAIN` (defaults to `ciklum.com`)
+3. Add `OPENAI_API_KEY` in Project Settings -> Environment Variables
 4. Keep auto-deploy enabled for `main`
 
 ## Current Constraints

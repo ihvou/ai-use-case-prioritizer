@@ -1,5 +1,3 @@
-import { requireAuth } from "./_auth.js";
-
 function sanitizeText(input) {
   return String(input || "")
     .replace(/\s+/g, " ")
@@ -50,7 +48,6 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
-  if (!requireAuth(req, res)) return;
 
   const url = String(req.body?.url || "").trim();
   if (!isValidHttpUrl(url)) {
@@ -107,3 +104,4 @@ export default async function handler(req, res) {
     clearTimeout(timeout);
   }
 }
+
