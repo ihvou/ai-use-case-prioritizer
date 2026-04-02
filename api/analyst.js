@@ -1,3 +1,5 @@
+import { requireAuth } from "./_auth.js";
+
 function normalizeMessageContent(content) {
   return typeof content === "string" ? content : JSON.stringify(content);
 }
@@ -213,6 +215,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
+  if (!requireAuth(req, res)) return;
 
   const { messages, systemPrompt, maxTokens = 5000, liveSearch = false } = req.body;
 
