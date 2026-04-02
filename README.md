@@ -218,13 +218,29 @@ Create `.env.local`:
 
 ```bash
 OPENAI_API_KEY=sk-...
+APP_ACCESS_PASSCODE=replace-with-shared-temporary-passcode
+AUTH_TOKEN_SECRET=replace-with-long-random-secret
 ```
+
+### Temporary Passcode Protection (No Email Provider)
+
+- The app supports temporary single-passcode protection with no third-party email/OTP provider.
+- Login endpoint: `POST /api/auth/passcode-login`
+- Session check endpoint: `GET /api/auth/session`
+- Logout endpoint: `POST /api/auth/logout`
+- Protected routes: `/api/analyst`, `/api/critic`, `/api/fetch-source`
+- Required env vars:
+  - `APP_ACCESS_PASSCODE`
+  - `AUTH_TOKEN_SECRET`
 
 ## Deploy (Vercel)
 
 1. Push to GitHub
 2. Import repo into Vercel
-3. Add `OPENAI_API_KEY` in Project Settings -> Environment Variables
+3. Add required env vars in Project Settings -> Environment Variables:
+   - `OPENAI_API_KEY`
+   - `APP_ACCESS_PASSCODE`
+   - `AUTH_TOKEN_SECRET`
 4. Keep auto-deploy enabled for `main`
 
 ## Current Constraints

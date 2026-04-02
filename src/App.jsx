@@ -34,11 +34,42 @@ export default function App() {
   const [importLoading, setImportLoading] = useState(false);
   const [importWarning, setImportWarning] = useState("");
   const [importError, setImportError] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+  const [authConfigured, setAuthConfigured] = useState(true);
+  const [authPasscode, setAuthPasscode] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authError, setAuthError] = useState("");
 
   const ucRef = useRef(useCases);
   const exportMenuRef = useRef(null);
   const importFileRef = useRef(null);
   useEffect(() => { ucRef.current = useCases; }, [useCases]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSession() {
+      setAuthLoading(true);
+      setAuthError("");
+      try {
+        const res = await fetch("/api/auth/session");
+        const data = await res.json();
+        if (cancelled) return;
+        setAuthReady(!!data?.authenticated);
+        setAuthConfigured(data?.configured !== false);
+      } catch (_) {
+        if (cancelled) return;
+        setAuthReady(false);
+        setAuthConfigured(true);
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    }
+
+    void loadSession();
+    return () => { cancelled = true; };
+  }, []);
 
   function updateUC(id, fn) {
     setUseCases(prev => prev.map(u => u.id === id ? fn(u) : u));
@@ -46,6 +77,46 @@ export default function App() {
 
   function setFuInput(key, val) {
     setFuInputs(prev => ({ ...prev, [key]: val }));
+  }
+
+  async function submitPasscode() {
+    const passcode = String(authPasscode || "");
+    if (!passcode.trim()) {
+      setAuthError("Enter passcode.");
+      return;
+    }
+
+    setAuthSubmitting(true);
+    setAuthError("");
+    try {
+      const res = await fetch("/api/auth/passcode-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Login failed.");
+      setAuthReady(true);
+      setAuthPasscode("");
+    } catch (err) {
+      setAuthError(err?.message || "Login failed.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (_) {
+      // Ignore logout transport issues.
+    }
+    setAuthReady(false);
+    setAuthPasscode("");
+    setAuthError("");
+    setUseCases([]);
+    setExpandedId(null);
+    setShowInputPanel(false);
   }
 
   async function runNewAnalysis(descInput, origin = null) {
@@ -250,6 +321,130 @@ export default function App() {
     discover: "Discover...",
   };
 
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--ck-bg)",
+        color: "var(--ck-text)",
+        fontFamily: "Inter, 'Segoe UI', -apple-system, sans-serif",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "var(--ck-muted)" }}>
+          <Spinner size={12} color="var(--ck-blue)" />
+          Checking access...
+        </div>
+      </div>
+    );
+  }
+
+  if (!authReady) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "var(--ck-bg)",
+        color: "var(--ck-text)",
+        fontFamily: "Inter, 'Segoe UI', -apple-system, sans-serif",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}>
+        <div style={{
+          width: "100%",
+          maxWidth: 430,
+          background: "var(--ck-surface)",
+          border: "1px solid var(--ck-line)",
+          borderRadius: 14,
+          padding: 22,
+          boxShadow: "0 8px 24px rgba(11,22,58,0.06)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <img
+              src="https://www.ciklum.com/wp-content/uploads/2025/10/fav.png"
+              alt="Ciklum icon"
+              width={16}
+              height={16}
+              style={{ borderRadius: 3, flexShrink: 0 }}
+            />
+            <span style={{ color: "var(--ck-blue)", fontWeight: 800, fontSize: 16 }}>AI Use Case Researcher</span>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--ck-muted)", marginBottom: 14 }}>
+            Temporary access protection is enabled. Enter the shared passcode to continue.
+          </div>
+          {!authConfigured && (
+            <div style={{
+              fontSize: 12,
+              color: "#b42318",
+              background: "#fff0ee",
+              border: "1px solid #f2c7be",
+              borderRadius: 8,
+              padding: "8px 10px",
+              marginBottom: 10,
+            }}>
+              Passcode auth is not configured. Set `APP_ACCESS_PASSCODE` and `AUTH_TOKEN_SECRET`.
+            </div>
+          )}
+          <label style={{ display: "block", fontSize: 11, color: "var(--ck-muted)", marginBottom: 6 }}>Passcode</label>
+          <input
+            type="password"
+            value={authPasscode}
+            onChange={(e) => setAuthPasscode(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { void submitPasscode(); } }}
+            placeholder="Enter shared passcode"
+            autoComplete="current-password"
+            style={{
+              width: "100%",
+              border: "1px solid var(--ck-line-strong)",
+              borderRadius: 8,
+              padding: "9px 10px",
+              fontSize: 13,
+              color: "var(--ck-text)",
+              background: "var(--ck-surface-soft)",
+              outline: "none",
+              marginBottom: 10,
+            }}
+          />
+          {!!authError && (
+            <div style={{
+              fontSize: 12,
+              color: "#b42318",
+              background: "#fff0ee",
+              border: "1px solid #f2c7be",
+              borderRadius: 8,
+              padding: "8px 10px",
+              marginBottom: 10,
+            }}>
+              {authError}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => { void submitPasscode(); }}
+            disabled={authSubmitting || !authConfigured}
+            style={{
+              background: "var(--ck-blue)",
+              border: "none",
+              color: "#fff",
+              borderRadius: 8,
+              padding: "9px 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              opacity: authSubmitting || !authConfigured ? 0.65 : 1,
+            }}
+          >
+            {authSubmitting ? <><Spinner size={10} color="#fff" /> Unlocking...</> : "Unlock"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden", background: "var(--ck-bg)", color: "var(--ck-text)", fontFamily: "Inter, 'Segoe UI', -apple-system, sans-serif", fontSize: 14 }}>
       {/* HEADER */}
@@ -272,6 +467,20 @@ export default function App() {
           </span>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => { void logout(); }}
+            style={{
+              background: "var(--ck-surface)",
+              border: "1px solid var(--ck-line)",
+              color: "var(--ck-blue)",
+              padding: "6px 12px",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 700,
+            }}>
+            Lock
+          </button>
           <details ref={exportMenuRef} style={{ position: "relative" }}>
             <summary
               onClick={(e) => {
